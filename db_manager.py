@@ -12,6 +12,7 @@ class DatabaseManager:
         self._init_receipt_tables()
         self._init_order_details_columns()
         self._init_favorites_table()
+        self._init_bonus_tables()
 
     def _get_connection(self):
         conn = sqlite3.connect(self.db_name)
@@ -83,6 +84,200 @@ class DatabaseManager:
                 )
             """)
             conn.commit()
+
+    def _init_bonus_tables(self):
+        """Створення таблиць бонусної програми та додавання бонусних полів у orders"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS client_bonuses (
+                    client_id INTEGER PRIMARY KEY,
+                    current_balance INTEGER NOT NULL DEFAULT 0,
+                    total_earned INTEGER NOT NULL DEFAULT 0,
+                    total_spent INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bonus_transactions (
+                    transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER NOT NULL,
+                    order_id INTEGER NOT NULL,
+                    transaction_type TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(order_id, transaction_type),
+                    FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE,
+                    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("PRAGMA table_info(orders)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'bonus_used' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN bonus_used INTEGER NOT NULL DEFAULT 0")
+            if 'bonus_earned' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN bonus_earned INTEGER NOT NULL DEFAULT 0")
+            if 'bonus_awarded' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN bonus_awarded INTEGER NOT NULL DEFAULT 0")
+
+            conn.commit()
+
+    # --- ОПЕРАЦІЇ З ПРОФІЛЕМ ПОКУПЦЯ ---
+
+    def ensure_client_profile(self, client_id: int) -> Client:
+        """Гарантує наявність запису клієнта та його бонусного рахунку в SQLite"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT client_id, full_name, phone, email, address
+                FROM clients WHERE client_id = ?
+            """, (client_id,))
+            row = cursor.fetchone()
+            if not row:
+                cursor.execute("""
+                    INSERT INTO clients (client_id, full_name, phone, email, address)
+                    VALUES (?, 'Покупець', '', '', '')
+                """, (client_id,))
+                client = Client(full_name="Покупець", phone="", email="", address="", client_id=client_id)
+            else:
+                client = Client(
+                    client_id=row[0], full_name=row[1] or "Покупець",
+                    phone=row[2] or "", email=row[3] or "", address=row[4] or ""
+                )
+
+            cursor.execute("""
+                INSERT OR IGNORE INTO client_bonuses (client_id, current_balance, total_earned, total_spent)
+                VALUES (?, 0, 0, 0)
+            """, (client_id,))
+            conn.commit()
+            return client
+
+    def get_client_by_id(self, client_id: int) -> Optional[Client]:
+        """Отримання профілю конкретного покупця за його ID"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT client_id, full_name, phone, email, address
+                FROM clients WHERE client_id = ?
+            """, (client_id,))
+            row = cursor.fetchone()
+            if row:
+                return Client(
+                    client_id=row[0], full_name=row[1] or "",
+                    phone=row[2] or "", email=row[3] or "", address=row[4] or ""
+                )
+            return None
+
+    def update_client_profile(self, client_id: int, full_name: str, phone: str, email: str):
+        """Оновлення особистих даних покупця у таблиці clients"""
+        self.ensure_client_profile(client_id)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE clients
+                SET full_name = ?, phone = ?, email = ?
+                WHERE client_id = ?
+            """, (full_name.strip(), phone.strip(), email.strip(), client_id))
+            conn.commit()
+
+    # --- ОПЕРАЦІЇ З БОНУСНОЮ ПРОГРАМОЮ ---
+
+    def _award_bonuses_in_cursor(self, cursor, order_id: int) -> int:
+        """
+        Нарахування бонусів (1 бонус за кожні 100 грн) за замовлення зі статусом «Доставлено».
+        Захищено від повторного нарахування через bonus_awarded та UNIQUE(order_id, 'EARN').
+        """
+        cursor.execute("""
+            SELECT client_id, total_amount, status, bonus_awarded
+            FROM orders WHERE order_id = ?
+        """, (order_id,))
+        row = cursor.fetchone()
+        if not row:
+            return 0
+
+        client_id, total_amount, status, bonus_awarded = row
+        if bonus_awarded == 1:
+            return 0
+
+        if not status or status.strip().lower() != "доставлено":
+            return 0
+
+        earned = max(0, int(float(total_amount) // 100))
+
+        cursor.execute("""
+            INSERT OR IGNORE INTO client_bonuses (client_id, current_balance, total_earned, total_spent)
+            VALUES (?, 0, 0, 0)
+        """, (client_id,))
+
+        if earned > 0:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bonus_transactions (client_id, order_id, transaction_type, amount)
+                VALUES (?, ?, 'EARN', ?)
+            """, (client_id, order_id, earned))
+
+            if cursor.rowcount == 1:
+                cursor.execute("""
+                    UPDATE client_bonuses
+                    SET current_balance = current_balance + ?,
+                        total_earned = total_earned + ?
+                    WHERE client_id = ?
+                """, (earned, earned, client_id))
+
+        cursor.execute("""
+            UPDATE orders
+            SET bonus_awarded = 1, bonus_earned = ?
+            WHERE order_id = ?
+        """, (earned, order_id))
+        return earned
+
+    def award_order_bonuses(self, order_id: int) -> int:
+        """Нарахування бонусів за конкретне доставлене замовлення"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            earned = self._award_bonuses_in_cursor(cursor, order_id)
+            conn.commit()
+            return earned
+
+    def sync_client_bonuses(self, client_id: int):
+        """Перевірка всіх замовлень покупця зі статусом «Доставлено» та нарахування ненарахованих бонусів"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT order_id FROM orders
+                WHERE client_id = ? AND LOWER(TRIM(status)) = 'доставлено' AND bonus_awarded = 0
+            """, (client_id,))
+            order_ids = [r[0] for r in cursor.fetchall()]
+            for oid in order_ids:
+                self._award_bonuses_in_cursor(cursor, oid)
+            conn.commit()
+
+    def get_client_bonus_info(self, client_id: int) -> dict:
+        """Отримання актуального бонусного балансу конкретного покупця"""
+        self.ensure_client_profile(client_id)
+        self.sync_client_bonuses(client_id)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT current_balance, total_earned, total_spent
+                FROM client_bonuses WHERE client_id = ?
+            """, (client_id,))
+            row = cursor.fetchone()
+            if row:
+                cur_bal = int(row[0])
+                return {
+                    "current_balance": cur_bal,
+                    "uah_equivalent": float(cur_bal),
+                    "total_earned": int(row[1]),
+                    "total_spent": int(row[2])
+                }
+            return {
+                "current_balance": 0,
+                "uah_equivalent": 0.0,
+                "total_earned": 0,
+                "total_spent": 0
+            }
 
     # --- ОПЕРАЦІЇ З КАТЕГОРІЯМИ ---
 
@@ -349,30 +544,78 @@ class DatabaseManager:
         delivery_method: str = "Нова пошта",
         delivery_address: str = "",
         payment_method: str = "Оплата карткою",
-        comment: str = ""
+        comment: str = "",
+        active_client_id: Optional[int] = None,
+        bonus_used: int = 0
     ) -> Tuple[int, int]:
-        """Створення клієнта, замовлення з деталями доставки/оплати та оновлення залишків товарів"""
+        """Створення замовлення з урахуванням прив'язки до облікового запису покупця та списання бонусів"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
             final_address = delivery_address or client.address
-            
-            cursor.execute("""
-                INSERT INTO clients (full_name, phone, email, address)
-                VALUES (?, ?, ?, ?)
-            """, (client.full_name, client.phone, client.email, final_address))
-            client_id = cursor.lastrowid
 
-            total_amount = sum(item.quantity * item.price_per_unit for item in items)
+            if active_client_id is not None:
+                cursor.execute("SELECT client_id FROM clients WHERE client_id = ?", (active_client_id,))
+                if cursor.fetchone():
+                    cursor.execute("""
+                        UPDATE clients
+                        SET full_name = ?, phone = ?, email = ?, address = ?
+                        WHERE client_id = ?
+                    """, (client.full_name, client.phone, client.email, final_address, active_client_id))
+                else:
+                    cursor.execute("""
+                        INSERT INTO clients (client_id, full_name, phone, email, address)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (active_client_id, client.full_name, client.phone, client.email, final_address))
+                client_id = active_client_id
+            else:
+                cursor.execute("""
+                    INSERT INTO clients (full_name, phone, email, address)
+                    VALUES (?, ?, ?, ?)
+                """, (client.full_name, client.phone, client.email, final_address))
+                client_id = cursor.lastrowid
+
+            cursor.execute("""
+                INSERT OR IGNORE INTO client_bonuses (client_id, current_balance, total_earned, total_spent)
+                VALUES (?, 0, 0, 0)
+            """, (client_id,))
+
+            subtotal = sum(item.quantity * item.price_per_unit for item in items)
+
+            # Перевірка обмежень бонусної знижки на рівні БД
+            cursor.execute("SELECT current_balance FROM client_bonuses WHERE client_id = ?", (client_id,))
+            bal_row = cursor.fetchone()
+            available_bonuses = int(bal_row[0]) if bal_row else 0
+
+            valid_bonus_used = max(0, min(int(bonus_used), available_bonuses, int(subtotal)))
+            total_amount = max(0.0, subtotal - valid_bonus_used)
 
             cursor.execute("""
                 INSERT INTO orders (
                     client_id, total_amount, status,
-                    delivery_method, delivery_address, payment_method, comment
+                    delivery_method, delivery_address, payment_method, comment,
+                    bonus_used, bonus_earned, bonus_awarded
                 )
-                VALUES (?, ?, 'Нове', ?, ?, ?, ?)
-            """, (client_id, total_amount, delivery_method, final_address, payment_method, comment))
+                VALUES (?, ?, 'Нове', ?, ?, ?, ?, ?, 0, 0)
+            """, (
+                client_id, total_amount, delivery_method,
+                final_address, payment_method, comment, valid_bonus_used
+            ))
             order_id = cursor.lastrowid
+
+            if valid_bonus_used > 0:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO bonus_transactions (client_id, order_id, transaction_type, amount)
+                    VALUES (?, ?, 'SPEND', ?)
+                """, (client_id, order_id, valid_bonus_used))
+
+                if cursor.rowcount == 1:
+                    cursor.execute("""
+                        UPDATE client_bonuses
+                        SET current_balance = current_balance - ?,
+                            total_spent = total_spent + ?
+                        WHERE client_id = ?
+                    """, (valid_bonus_used, valid_bonus_used, client_id))
 
             for item in items:
                 cursor.execute("""
@@ -389,6 +632,21 @@ class DatabaseManager:
             conn.commit()
             return order_id, client_id
 
+    def update_order_status(self, order_id: int, new_status: str):
+        """Оновлення статусу замовлення з автоматичним нарахуванням бонусів при статусі «Доставлено»"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE orders
+                SET status = ?
+                WHERE order_id = ?
+            """, (new_status, order_id))
+
+            if new_status and new_status.strip().lower() == "доставлено":
+                self._award_bonuses_in_cursor(cursor, order_id)
+
+            conn.commit()
+
     def update_order_receipt_path(self, order_id: int, receipt_path: str):
         """Запис шляху до PDF-чека у базу даних"""
         with self._get_connection() as conn:
@@ -403,6 +661,9 @@ class DatabaseManager:
     def get_orders(self, client_id: Optional[int] = None, is_admin: bool = False) -> list:
         if not is_admin and client_id is None:
             return []
+
+        if client_id is not None:
+            self.sync_client_bonuses(client_id)
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -421,13 +682,66 @@ class DatabaseManager:
             cursor.execute(sql, params)
             return cursor.fetchall()
 
+    def get_client_orders_detailed(self, client_id: int) -> list:
+        """Отримання розширеної історії замовлень конкретного покупця для особистого кабінету"""
+        self.sync_client_bonuses(client_id)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT o.order_id, o.order_date, o.status, o.total_amount,
+                       o.bonus_used, o.bonus_earned, o.bonus_awarded,
+                       o.delivery_method, o.delivery_address, o.payment_method, o.comment, o.receipt_path
+                FROM orders o
+                WHERE o.client_id = ?
+                ORDER BY o.order_id DESC
+            """, (client_id,))
+            orders_rows = cursor.fetchall()
+
+            result = []
+            for r in orders_rows:
+                oid = r[0]
+                cursor.execute("""
+                    SELECT p.title, oi.quantity, oi.price_per_unit
+                    FROM order_items oi
+                    JOIN products p ON oi.product_id = p.product_id
+                    WHERE oi.order_id = ?
+                """, (oid,))
+                items_rows = cursor.fetchall()
+
+                items_list = [
+                    {"title": ir[0], "quantity": ir[1], "price_per_unit": ir[2]}
+                    for ir in items_rows
+                ]
+                total_items_count = sum(ir[1] for ir in items_rows)
+                items_summary = ", ".join(f"{ir[0]} (×{ir[1]})" for ir in items_rows) if items_rows else "—"
+
+                result.append({
+                    "order_id": oid,
+                    "order_date": str(r[1]),
+                    "status": r[2],
+                    "total_amount": float(r[3]),
+                    "bonus_used": int(r[4] or 0),
+                    "bonus_earned": int(r[5] or 0),
+                    "bonus_awarded": int(r[6] or 0),
+                    "delivery_method": r[7] or "Нова пошта",
+                    "delivery_address": r[8] or "",
+                    "payment_method": r[9] or "Оплата карткою",
+                    "comment": r[10] or "",
+                    "receipt_path": r[11],
+                    "items": items_list,
+                    "items_summary": items_summary,
+                    "total_items_count": total_items_count
+                })
+            return result
+
     def get_order_full_info(self, order_id: int) -> Optional[dict]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT o.order_id, c.full_name, c.phone, o.order_date, o.status,
                        o.total_amount, o.receipt_path, o.client_id,
-                       o.delivery_method, o.delivery_address, o.payment_method, o.comment
+                       o.delivery_method, o.delivery_address, o.payment_method, o.comment,
+                       o.bonus_used, o.bonus_earned, o.bonus_awarded
                 FROM orders o
                 JOIN clients c ON o.client_id = c.client_id
                 WHERE o.order_id = ?
@@ -457,6 +771,9 @@ class DatabaseManager:
                 "delivery_address": order_row[9] or "",
                 "payment_method": order_row[10] or "Оплата карткою",
                 "comment": order_row[11] or "",
+                "bonus_used": int(order_row[12] or 0),
+                "bonus_earned": int(order_row[13] or 0),
+                "bonus_awarded": int(order_row[14] or 0),
                 "items": [
                     {"title": r[0], "quantity": r[1], "price_per_unit": r[2]}
                     for r in items_rows

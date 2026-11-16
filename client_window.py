@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, 
-    QComboBox, QPushButton, QMessageBox, QLineEdit, QTabWidget,
+    QComboBox, QPushButton, QLineEdit, QTabWidget,
     QFrame, QCheckBox, QScrollArea, QStackedWidget
 )
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal
@@ -9,6 +9,7 @@ from cart import CartDialog
 from orders_tab import OrdersTab
 from product_detail_page import ProductDetailPage
 from favorites_tab import FavoritesTab
+from profile import PersonalAccountWidget
 
 
 class ProductCard(QFrame):
@@ -41,7 +42,6 @@ class ProductCard(QFrame):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(8)
 
-        # Верхній рядок: Бренд + кнопка-сердечко
         top_row = QHBoxLayout()
         brand_lbl = QLabel(self.product.brand)
         brand_lbl.setStyleSheet("""
@@ -65,14 +65,12 @@ class ProductCard(QFrame):
 
         layout.addLayout(top_row)
 
-        # Назва товару
         title_lbl = QLabel(self.product.title)
         title_lbl.setWordWrap(True)
         title_lbl.setMinimumHeight(42)
         title_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #0F172A; background: transparent;")
         layout.addWidget(title_lbl)
 
-        # Наявність
         if self.product.stock_quantity > 0:
             stock_lbl = QLabel(f"● В наявності: {self.product.stock_quantity} шт.")
             stock_lbl.setStyleSheet("font-size: 12px; color: #15803D; font-weight: bold; background: transparent;")
@@ -83,7 +81,6 @@ class ProductCard(QFrame):
 
         layout.addStretch()
 
-        # Нижній рядок: Ціна + кнопка «Детальніше»
         bottom_row = QHBoxLayout()
         price_lbl = QLabel(f"{self.product.price:.2f} грн")
         price_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B; background: transparent;")
@@ -168,9 +165,6 @@ class ClientCatalogWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        # Використовуємо QStackedWidget для перемикання:
-        # 0 -> Загальний каталог з бічною панеллю фільтрів
-        # 1 -> Окрема сторінка детальної інформації про товар
         self.stack = QStackedWidget(self)
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -184,7 +178,6 @@ class ClientCatalogWidget(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # 1. ЛІВА БІЧНА ПАНЕЛЬ ФІЛЬТРІВ ТА КОНТАКТІВ
         self.sidebar_container = QFrame()
         self.sidebar_container.setMaximumWidth(0)
         self.sidebar_container.setMinimumWidth(0)
@@ -337,7 +330,6 @@ class ClientCatalogWidget(QWidget):
         scroll_area.setWidget(scroll_content)
         sidebar_layout.addWidget(scroll_area, stretch=1)
 
-        # БЛОК: Контакти внизу бічної панелі
         contacts_frame = QFrame()
         contacts_frame.setStyleSheet("""
             QFrame {
@@ -375,7 +367,6 @@ class ClientCatalogWidget(QWidget):
 
         root_layout.addWidget(self.sidebar_container)
 
-        # 2. ОСНОВНА ОБЛАСТЬ КАТАЛОГУ (ВЕРХНЯ ПАНЕЛЬ + СІТКА КАРТОК ТОВАРІВ)
         main_content = QWidget()
         main_layout = QVBoxLayout(main_content)
         main_layout.setContentsMargins(12, 10, 12, 10)
@@ -425,7 +416,6 @@ class ClientCatalogWidget(QWidget):
 
         main_layout.addLayout(top_bar)
 
-        # Область прокрутки для карток товарів
         self.cards_scroll = QScrollArea()
         self.cards_scroll.setWidgetResizable(True)
         self.cards_scroll.setFrameShape(QFrame.NoFrame)
@@ -458,16 +448,12 @@ class ClientCatalogWidget(QWidget):
 
         self.load_categories()
 
-    # --- НАВІГАЦІЯ НА СТОРІНКУ ТОВАРУ ---
-
     def open_product_detail(self, product_id: int, return_callback=None):
-        """Відкриває окрему сторінку конкретного товару"""
         self.return_to_favorites_callback = return_callback
         self.detail_page.load_product(product_id)
         self.stack.setCurrentIndex(1)
 
     def close_product_detail(self):
-        """Повернення зі сторінки товару назад у каталог або вкладку «Обране»"""
         self.stack.setCurrentIndex(0)
         self.sync_card_hearts()
         if self.return_to_favorites_callback:
@@ -479,8 +465,6 @@ class ClientCatalogWidget(QWidget):
         if product_id in self.card_widgets:
             self.card_widgets[product_id].set_favorite(is_fav)
         self.favorites_changed.emit()
-
-    # --- УПРАВЛІННЯ БІЧНОЮ ПАНЕЛЛЮ ---
 
     def toggle_sidebar(self):
         if self.sidebar_open:
@@ -501,8 +485,6 @@ class ClientCatalogWidget(QWidget):
         self.sidebar_anim.setStartValue(self.sidebar_container.width())
         self.sidebar_anim.setEndValue(0)
         self.sidebar_anim.start()
-
-    # --- КАТЕГОРІЇ, КАРТКИ ТОВАРІВ ТА ФІЛЬТРИ ---
 
     def load_categories(self):
         for cb in self.category_checkboxes:
@@ -555,7 +537,6 @@ class ClientCatalogWidget(QWidget):
         self.render_product_cards()
 
     def render_product_cards(self):
-        """Відображення товарів у вигляді сітки карток"""
         while self.cards_grid.count():
             item = self.cards_grid.takeAt(0)
             if item.widget():
@@ -584,12 +565,10 @@ class ClientCatalogWidget(QWidget):
             self.cards_grid.addWidget(card, row, col)
             self.card_widgets[prod.product_id] = card
 
-        # Додаємо розтягувач знизу, щоб картки не розтягувались по вертикалі при малій кількості
         total_rows = (len(self.current_products) + cols - 1) // cols
         self.cards_grid.setRowStretch(total_rows, 1)
 
     def toggle_card_favorite(self, product_id: int):
-        """Додавання / видалення товару з обраного при натисканні на сердечко картки"""
         client_id = self.get_client_id()
         is_fav = self.db.toggle_favorite(client_id, product_id)
         if product_id in self.card_widgets:
@@ -597,7 +576,6 @@ class ClientCatalogWidget(QWidget):
         self.favorites_changed.emit()
 
     def sync_card_hearts(self):
-        """Синхронізація іконок сердечок на картках із актуальними даними SQLite"""
         client_id = self.get_client_id()
         favorite_ids = self.db.get_favorite_product_ids(client_id)
         for pid, card in self.card_widgets.items():
@@ -630,31 +608,82 @@ class ClientCatalogWidget(QWidget):
 
 
 class ClientWindow(QMainWindow):
-    """Головне вікно Клієнта"""
+    """Головне вікно Клієнта з кнопкою «Особистий кабінет»"""
     def __init__(self, db_manager=None, client_id=None):
         super().__init__()
         self.db = db_manager or DatabaseManager()
-        self.client_id = client_id
+        self.client_id = client_id if client_id is not None else 1
+        self.db.ensure_client_profile(self.client_id)
+
         self.setWindowTitle("Магазин комп'ютерної техніки — Клієнт")
-        self.resize(1100, 700)
+        self.resize(1120, 720)
+
+        central_container = QWidget()
+        self.setCentralWidget(central_container)
+        main_vbox = QVBoxLayout(central_container)
+        main_vbox.setContentsMargins(0, 0, 0, 0)
+        main_vbox.setSpacing(0)
+
+        # --- Верхня панель магазину з кнопкою «Особистий кабінет» ---
+        store_header = QFrame()
+        store_header.setStyleSheet("""
+            QFrame {
+                background-color: #0F172A;
+                border-bottom: 1px solid #1E293B;
+            }
+        """)
+        header_layout = QHBoxLayout(store_header)
+        header_layout.setContentsMargins(16, 8, 16, 8)
+
+        brand_title = QLabel("🖥️ PC Shop — Онлайн-магазин комп’ютерної техніки")
+        brand_title.setStyleSheet("color: #F8FAFC; font-size: 15px; font-weight: bold; border: none;")
+        header_layout.addWidget(brand_title)
+        header_layout.addStretch()
+
+        self.profile_btn = QPushButton("👤 Особистий кабінет")
+        self.profile_btn.setCursor(Qt.PointingHandCursor)
+        self.profile_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 7px 16px;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #1D4ED8;
+            }
+        """)
+        self.profile_btn.clicked.connect(self.open_personal_account)
+        header_layout.addWidget(self.profile_btn)
+
+        main_vbox.addWidget(store_header)
+
+        # --- Стек сторінок: 0 -> Магазин (вкладки), 1 -> Особистий кабінет ---
+        self.main_stack = QStackedWidget()
+        main_vbox.addWidget(self.main_stack, stretch=1)
 
         self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
-
-        # 1. Вкладка «Каталог товарів»
         self.catalog_widget = ClientCatalogWidget(self.db, self.get_active_client_id)
-
-        # 2. Вкладка «Обране» (поруч із «Мої замовлення»)
         self.favorites_widget = FavoritesTab(self.db, self.get_active_client_id)
-
-        # 3. Вкладка «Мої замовлення»
         self.orders_widget = OrdersTab(self.db, client_id=self.client_id, is_admin=False)
 
         self.tabs.addTab(self.catalog_widget, "Каталог товарів")
         self.tabs.addTab(self.favorites_widget, "❤️ Обране")
         self.tabs.addTab(self.orders_widget, "Мої замовлення")
 
-        # Синхронізація між каталогом та вкладкою «Обране»
+        self.main_stack.addWidget(self.tabs)
+
+        # Сторінка особистого кабінету з окремого модуля profile.py
+        self.profile_widget = PersonalAccountWidget(
+            db_manager=self.db,
+            get_client_id_func=self.get_active_client_id
+        )
+        self.profile_widget.back_to_store_requested.connect(self.close_personal_account)
+        self.main_stack.addWidget(self.profile_widget)
+
         self.catalog_widget.favorites_changed.connect(self.favorites_widget.load_favorites)
         self.favorites_widget.favorite_removed.connect(lambda _: self.catalog_widget.sync_card_hearts())
         self.favorites_widget.open_product_requested.connect(self.open_product_from_favorites)
@@ -662,11 +691,20 @@ class ClientWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.on_tab_change)
 
     def get_active_client_id(self) -> int:
-        """Повертає ID авторизованого клієнта або базовий ID=1 для збереження в SQLite"""
         return self.client_id if self.client_id is not None else 1
 
+    def open_personal_account(self):
+        """Відкриття особистого кабінету покупця з оновленням профілю, бонусів та замовлень"""
+        self.profile_widget.refresh_data()
+        self.main_stack.setCurrentIndex(1)
+
+    def close_personal_account(self):
+        """Повернення з особистого кабінету до каталогу магазину"""
+        self.main_stack.setCurrentIndex(0)
+        if self.tabs.currentIndex() == 2:
+            self.orders_widget.load_orders()
+
     def open_product_from_favorites(self, product_id: int):
-        """Перехід зі списку «Обране» на сторінку конкретного товару"""
         self.tabs.setCurrentIndex(0)
         self.catalog_widget.open_product_detail(
             product_id,
@@ -675,9 +713,12 @@ class ClientWindow(QMainWindow):
 
     def set_client_id(self, client_id):
         self.client_id = client_id
+        self.db.ensure_client_profile(self.client_id)
         self.orders_widget.set_client_id(client_id)
         self.favorites_widget.load_favorites()
         self.catalog_widget.sync_card_hearts()
+        if self.main_stack.currentIndex() == 1:
+            self.profile_widget.refresh_data()
 
     def on_tab_change(self, index):
         if index == 0:

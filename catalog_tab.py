@@ -103,15 +103,25 @@ class ProductDialog(QDialog):
 
 
 class OrderDialog(QDialog):
-    """Сучасна сторінка оформлення замовлення з валідацією та підсумком"""
+    """Сторінка оформлення замовлення з валідацією, підсумком та списанням бонусів"""
     PICKUP_ADDRESS = "м. Київ, вул. Хрещатик, 22 (Пункт самовивозу магазину)"
 
-    def __init__(self, cart_items=None, parent=None):
+    def __init__(self, cart_items=None, db_manager=None, client_id=None, parent=None):
         super().__init__(parent)
         self.cart_items = cart_items or []
+        self.db = db_manager
+        self.client_id = client_id
+        self.subtotal = sum(prod.price * qty for prod, qty in self.cart_items)
+        self.available_bonuses = 0
+
+        if self.db is not None and self.client_id is not None:
+            bonus_info = self.db.get_client_bonus_info(self.client_id)
+            self.available_bonuses = bonus_info.get("current_balance", 0)
+
         self.setWindowTitle("Оформлення замовлення")
-        self.resize(860, 620)
+        self.resize(880, 660)
         self.init_ui()
+        self.prefill_client_profile()
 
     def init_ui(self):
         self.setStyleSheet("""
@@ -133,7 +143,7 @@ class OrderDialog(QDialog):
                 font-weight: bold;
                 color: #334155;
             }
-            QLineEdit, QComboBox, QTextEdit {
+            QLineEdit, QComboBox, QTextEdit, QSpinBox {
                 background-color: #FFFFFF;
                 border: 1px solid #CBD5E1;
                 border-radius: 6px;
@@ -141,7 +151,7 @@ class OrderDialog(QDialog):
                 font-size: 13px;
                 color: #0F172A;
             }
-            QLineEdit:focus, QComboBox:focus, QTextEdit:focus {
+            QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QSpinBox:focus {
                 border: 1px solid #2563EB;
             }
         """)
@@ -150,12 +160,10 @@ class OrderDialog(QDialog):
         root_layout.setContentsMargins(16, 14, 16, 14)
         root_layout.setSpacing(12)
 
-        # Заголовок сторінки
         header_lbl = QLabel("Оформлення замовлення")
         header_lbl.setStyleSheet("font-size: 19px; font-weight: bold; color: #0F172A;")
         root_layout.addWidget(header_lbl)
 
-        # Основний двоколонковий контейнер
         columns_layout = QHBoxLayout()
         columns_layout.setSpacing(14)
 
@@ -168,7 +176,6 @@ class OrderDialog(QDialog):
         left_layout.setContentsMargins(16, 14, 16, 14)
         left_layout.setSpacing(10)
 
-        # 1. Контактні дані покупця
         buyer_title = QLabel("1. Контактні дані покупця")
         buyer_title.setObjectName("SectionTitle")
         left_layout.addWidget(buyer_title)
@@ -217,7 +224,6 @@ class OrderDialog(QDialog):
         left_layout.addWidget(lbl_delivery)
         left_layout.addWidget(self.delivery_combo)
 
-        # Динамічний стек полів адреси
         self.address_stack = QStackedWidget()
 
         # Сторінка 0: Нова пошта
@@ -312,7 +318,7 @@ class OrderDialog(QDialog):
         lbl_comment.setObjectName("FieldLabel")
         self.comment_input = QTextEdit()
         self.comment_input.setPlaceholderText("Додаткові побажання до замовлення...")
-        self.comment_input.setFixedHeight(62)
+        self.comment_input.setFixedHeight(58)
         left_layout.addWidget(lbl_comment)
         left_layout.addWidget(self.comment_input)
 
@@ -320,7 +326,7 @@ class OrderDialog(QDialog):
         columns_layout.addWidget(left_panel, stretch=3)
 
         # ==========================================
-        # ПРАВА КОЛОНКА: ПІДСУМОК ЗАМОВЛЕННЯ (БЕЗ ФОТО)
+        # ПРАВА КОЛОНКА: ПІДСУМОК ТА БОНУСИ (БЕЗ ФОТО)
         # ==========================================
         right_panel = QFrame()
         right_panel.setObjectName("CardPanel")
@@ -332,7 +338,6 @@ class OrderDialog(QDialog):
         summary_title.setObjectName("SectionTitle")
         right_layout.addWidget(summary_title)
 
-        # Таблиця товарів (тільки назва, кількість, вартість — без фото)
         self.summary_table = QTableWidget()
         self.summary_table.setColumnCount(3)
         self.summary_table.setHorizontalHeaderLabels(["Товар", "К-сть", "Вартість"])
@@ -344,7 +349,64 @@ class OrderDialog(QDialog):
         self.summary_table.setSelectionMode(QTableWidget.NoSelection)
         right_layout.addWidget(self.summary_table)
 
-        # Інформаційний блок обраних параметрів доставки та оплати
+        # --- Блок використання бонусів ---
+        bonus_box = QFrame()
+        bonus_box.setStyleSheet("""
+            QFrame {
+                background-color: #EFF6FF;
+                border: 1px solid #BFDBFE;
+                border-radius: 8px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+                color: #1E3A8A;
+                font-size: 12px;
+            }
+        """)
+        bonus_box_layout = QVBoxLayout(bonus_box)
+        bonus_box_layout.setContentsMargins(10, 8, 10, 8)
+        bonus_box_layout.setSpacing(6)
+
+        max_usable = max(0, min(self.available_bonuses, int(self.subtotal)))
+
+        bonus_hdr = QLabel(f"🎁 Доступно бонусів: <b>{self.available_bonuses}</b> (еквівалент <b>{self.available_bonuses:.2f} грн</b>)")
+        bonus_box_layout.addWidget(bonus_hdr)
+
+        bonus_ctrl_row = QHBoxLayout()
+        bonus_ctrl_row.addWidget(QLabel("Списати бонусів:"))
+
+        self.bonus_spin = QSpinBox()
+        self.bonus_spin.setRange(0, max_usable)
+        self.bonus_spin.setValue(0)
+        self.bonus_spin.setSuffix(" бонусів")
+        self.bonus_spin.setEnabled(max_usable > 0)
+        self.bonus_spin.valueChanged.connect(self.recalculate_totals)
+        bonus_ctrl_row.addWidget(self.bonus_spin)
+
+        self.use_max_bonus_btn = QPushButton("Макс.")
+        self.use_max_bonus_btn.setCursor(Qt.PointingHandCursor)
+        self.use_max_bonus_btn.setEnabled(max_usable > 0)
+        self.use_max_bonus_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover:enabled { background-color: #1D4ED8; }
+            QPushButton:disabled { background-color: #94A3B8; }
+        """)
+        self.use_max_bonus_btn.clicked.connect(lambda: self.bonus_spin.setValue(max_usable))
+        bonus_ctrl_row.addWidget(self.use_max_bonus_btn)
+
+        bonus_box_layout.addLayout(bonus_ctrl_row)
+        right_layout.addWidget(bonus_box)
+
+        # Інформаційний блок обраних параметрів
         meta_box = QFrame()
         meta_box.setStyleSheet("""
             QFrame {
@@ -366,13 +428,18 @@ class OrderDialog(QDialog):
         self.items_count_label = QLabel("Позицій у замовленні: 0 шт.")
         self.delivery_preview_label = QLabel("Доставка: Нова пошта")
         self.payment_preview_label = QLabel("Оплата: Оплата карткою")
+        self.subtotal_label = QLabel(f"Сума товарів: {self.subtotal:.2f} грн")
+        self.bonus_discount_label = QLabel("Знижка бонусами: 0.00 грн")
+        self.bonus_discount_label.setStyleSheet("color: #2563EB; font-weight: bold; border: none; background: transparent;")
 
         meta_layout.addWidget(self.items_count_label)
         meta_layout.addWidget(self.delivery_preview_label)
         meta_layout.addWidget(self.payment_preview_label)
+        meta_layout.addWidget(self.subtotal_label)
+        meta_layout.addWidget(self.bonus_discount_label)
         right_layout.addWidget(meta_box)
 
-        # Загальна вартість
+        # Загальна вартість до сплати
         total_box = QFrame()
         total_box.setStyleSheet("""
             QFrame {
@@ -384,7 +451,7 @@ class OrderDialog(QDialog):
         total_layout = QHBoxLayout(total_box)
         total_layout.setContentsMargins(12, 10, 12, 10)
 
-        total_caption = QLabel("Загальна вартість:")
+        total_caption = QLabel("До сплати:")
         total_caption.setStyleSheet("font-size: 14px; font-weight: bold; color: #166534; border: none;")
         self.total_sum_label = QLabel("0.00 грн")
         self.total_sum_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #15803D; border: none;")
@@ -394,7 +461,6 @@ class OrderDialog(QDialog):
         total_layout.addWidget(self.total_sum_label)
         right_layout.addWidget(total_box)
 
-        # Кнопки підтвердження та повернення
         self.confirm_btn = QPushButton("✓ Підтвердити замовлення")
         self.confirm_btn.setCursor(Qt.PointingHandCursor)
         self.confirm_btn.setStyleSheet("""
@@ -437,15 +503,24 @@ class OrderDialog(QDialog):
 
         self.populate_summary_table()
 
+    def prefill_client_profile(self):
+        """Автопідстановка збережених контактних даних із особистого кабінету"""
+        if self.db is not None and self.client_id is not None:
+            client = self.db.get_client_by_id(self.client_id)
+            if client:
+                if client.full_name and client.full_name != "Покупець":
+                    self.name_input.setText(client.full_name)
+                if client.phone:
+                    self.phone_input.setText(client.phone)
+                if client.email:
+                    self.email_input.setText(client.email)
+
     def populate_summary_table(self):
-        """Заповнення підсумку товарів перед підтвердженням"""
         self.summary_table.setRowCount(len(self.cart_items))
-        total_sum = 0.0
         total_qty = 0
 
         for row, (prod, qty) in enumerate(self.cart_items):
             row_sum = prod.price * qty
-            total_sum += row_sum
             total_qty += qty
 
             self.summary_table.setItem(row, 0, QTableWidgetItem(prod.title))
@@ -453,10 +528,20 @@ class OrderDialog(QDialog):
             self.summary_table.setItem(row, 2, QTableWidgetItem(f"{row_sum:.2f} грн"))
 
         self.items_count_label.setText(f"Всього товарів: {total_qty} шт.")
-        self.total_sum_label.setText(f"{total_sum:.2f} грн")
+        self.recalculate_totals()
+
+    def recalculate_totals(self):
+        bonus_used = self.get_bonus_used()
+        final_total = max(0.0, self.subtotal - bonus_used)
+        self.subtotal_label.setText(f"Сума товарів: {self.subtotal:.2f} грн")
+        self.bonus_discount_label.setText(f"Знижка бонусами: -{bonus_used:.2f} грн")
+        self.total_sum_label.setText(f"{final_total:.2f} грн")
+
+    def get_bonus_used(self) -> int:
+        max_usable = max(0, min(self.available_bonuses, int(self.subtotal)))
+        return max(0, min(self.bonus_spin.value(), max_usable))
 
     def on_delivery_method_changed(self, index: int):
-        """Динамічне перемикання полів адреси залежно від способу доставки"""
         self.address_stack.setCurrentIndex(index)
         self.update_summary_meta()
 
@@ -472,7 +557,6 @@ class OrderDialog(QDialog):
         return bool(re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email.strip()))
 
     def validate_and_accept(self):
-        """Валідація обов'язкових полів, номера телефону, email та адреси доставки"""
         full_name = self.name_input.text().strip()
         phone = self.phone_input.text().strip()
         email = self.email_input.text().strip()
@@ -551,18 +635,20 @@ class OrderDialog(QDialog):
             "delivery_method": self.delivery_combo.currentText(),
             "delivery_address": self.get_formatted_delivery_address(),
             "payment_method": self.payment_combo.currentText(),
-            "comment": self.comment_input.toPlainText().strip()
+            "comment": self.comment_input.toPlainText().strip(),
+            "bonus_used": self.get_bonus_used()
         }
 
 
 class OrderSuccessDialog(QDialog):
     """Екран успішного оформлення замовлення з унікальним номером"""
     def __init__(self, order_id: int, client_name: str, delivery_address: str,
-                 payment_method: str, total_amount: float, pdf_path: str, parent=None):
+                 payment_method: str, total_amount: float, pdf_path: str,
+                 bonus_used: int = 0, parent=None):
         super().__init__(parent)
         self.pdf_path = pdf_path
         self.setWindowTitle(f"Замовлення №{order_id} оформлено")
-        self.resize(480, 360)
+        self.resize(480, 380)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 20)
@@ -612,10 +698,12 @@ class OrderSuccessDialog(QDialog):
         card_layout.addWidget(QLabel(f"<b>Покупець:</b> {client_name}"))
         card_layout.addWidget(QLabel(f"<b>Доставка:</b> {delivery_address}"))
         card_layout.addWidget(QLabel(f"<b>Оплата:</b> {payment_method}"))
+        if bonus_used > 0:
+            card_layout.addWidget(QLabel(f"<b>Списано бонусів:</b> {bonus_used} бонусів (-{bonus_used:.2f} грн)"))
         card_layout.addWidget(QLabel(f"<b>Сума до сплати:</b> {total_amount:.2f} грн"))
         layout.addWidget(details_card)
 
-        note = QLabel("PDF-чек збережено та завжди доступний у розділі «Мої замовлення».")
+        note = QLabel("PDF-чек збережено та доступний в особистому кабінеті й розділі «Мої замовлення».")
         note.setWordWrap(True)
         note.setAlignment(Qt.AlignCenter)
         note.setStyleSheet("font-size: 12px; color: #475569;")

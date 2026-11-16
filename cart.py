@@ -107,6 +107,12 @@ class CartDialog(QDialog):
         self.cart.pop(selected)
         self.refresh_cart_table()
 
+    def _find_client_window(self):
+        parent_widget = self.parent()
+        while parent_widget and not hasattr(parent_widget, 'get_active_client_id'):
+            parent_widget = parent_widget.parent()
+        return parent_widget
+
     def checkout(self):
         if not self.cart:
             QMessageBox.warning(self, "Помилка", "Кошик порожній.")
@@ -114,10 +120,19 @@ class CartDialog(QDialog):
 
         from catalog_tab import OrderDialog, OrderSuccessDialog
 
-        dialog = OrderDialog(cart_items=self.cart, parent=self)
+        client_window = self._find_client_window()
+        active_client_id = client_window.get_active_client_id() if client_window else None
+
+        dialog = OrderDialog(
+            cart_items=self.cart,
+            db_manager=self.db,
+            client_id=active_client_id,
+            parent=self
+        )
         if dialog.exec_() == QDialog.Accepted:
             client = dialog.get_client_data()
             details = dialog.get_order_details()
+            bonus_used = details.get("bonus_used", 0)
 
             order_items = [
                 OrderItem(product_id=prod.product_id, quantity=qty, price_per_unit=prod.price)
@@ -130,7 +145,9 @@ class CartDialog(QDialog):
                 delivery_method=details["delivery_method"],
                 delivery_address=details["delivery_address"],
                 payment_method=details["payment_method"],
-                comment=details["comment"]
+                comment=details["comment"],
+                active_client_id=active_client_id,
+                bonus_used=bonus_used
             )
             order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -138,7 +155,8 @@ class CartDialog(QDialog):
                 {"title": prod.title, "quantity": qty, "price_per_unit": prod.price}
                 for prod, qty in self.cart
             ]
-            total_amount = sum(p.price * q for p, q in self.cart)
+            subtotal = sum(p.price * q for p, q in self.cart)
+            total_amount = max(0.0, subtotal - bonus_used)
 
             pdf_path = generate_pdf_receipt(
                 order_id=order_id,
@@ -151,19 +169,15 @@ class CartDialog(QDialog):
                 delivery_method=details["delivery_method"],
                 delivery_address=details["delivery_address"],
                 payment_method=details["payment_method"],
-                comment=details["comment"]
+                comment=details["comment"],
+                bonus_used=bonus_used
             )
 
             self.db.update_order_receipt_path(order_id, pdf_path)
 
-            # Передача нового client_id у головне вікно клієнта
-            parent_widget = self.parent()
-            while parent_widget and not hasattr(parent_widget, 'set_client_id'):
-                parent_widget = parent_widget.parent()
-            if parent_widget and hasattr(parent_widget, 'set_client_id'):
-                parent_widget.set_client_id(client_id)
+            if client_window and hasattr(client_window, 'set_client_id'):
+                client_window.set_client_id(client_id)
 
-            # Екран успішного оформлення замовлення
             success_dialog = OrderSuccessDialog(
                 order_id=order_id,
                 client_name=client.full_name,
@@ -171,6 +185,7 @@ class CartDialog(QDialog):
                 payment_method=details["payment_method"],
                 total_amount=total_amount,
                 pdf_path=pdf_path,
+                bonus_used=bonus_used,
                 parent=self
             )
             success_dialog.exec_()

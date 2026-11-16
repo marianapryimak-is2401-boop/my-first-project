@@ -37,7 +37,8 @@ def generate_pdf_receipt(
     delivery_method: str = "Нова пошта",
     delivery_address: str = "",
     payment_method: str = "Оплата карткою",
-    comment: str = ""
+    comment: str = "",
+    bonus_used: int = 0
 ) -> str:
     """
     Генерація та постійне збереження PDF-чека у папку receipts/
@@ -168,17 +169,23 @@ def generate_pdf_receipt(
     story.append(items_table)
     story.append(Spacer(1, 15))
 
-    total_data = [
-        [
-            Paragraph("<b>ЗАГАЛЬНА СУМА:</b>", ParagraphStyle('TotalText', parent=normal_style, fontSize=12)),
-            Paragraph(f"<b>{total_amount:.2f} грн</b>", ParagraphStyle('TotalSum', parent=normal_style, fontSize=14, textColor=colors.HexColor('#C53030')))
-        ]
-    ]
-    total_table = Table(total_data, colWidths=[350, 170])
+    total_rows = []
+    if bonus_used > 0:
+        total_rows.append([
+            Paragraph("<b>Знижка бонусами:</b>", normal_style),
+            Paragraph(f"<b>-{bonus_used:.2f} грн ({bonus_used} бонусів)</b>", normal_style)
+        ])
+
+    total_rows.append([
+        Paragraph("<b>ЗАГАЛЬНА СУМА ДО СПЛАТИ:</b>", ParagraphStyle('TotalText', parent=normal_style, fontSize=12)),
+        Paragraph(f"<b>{total_amount:.2f} грн</b>", ParagraphStyle('TotalSum', parent=normal_style, fontSize=14, textColor=colors.HexColor('#C53030')))
+    ])
+
+    total_table = Table(total_rows, colWidths=[350, 170])
     total_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('PADDING', (0, 0), (-1, -1), 8),
+        ('PADDING', (0, 0), (-1, -1), 6),
     ]))
     story.append(total_table)
     story.append(Spacer(1, 20))

@@ -1,5 +1,5 @@
 import sqlite3
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 from classes import Category, Product, Client, OrderItem, Order, Supplier
 
 
@@ -10,6 +10,7 @@ class DatabaseManager:
         self.db_name = db_name
         self._init_supplier_tables()
         self._init_receipt_tables()
+        self._init_favorites_table()
 
     def _get_connection(self):
         conn = sqlite3.connect(self.db_name)
@@ -49,6 +50,22 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE orders ADD COLUMN receipt_path TEXT")
             conn.commit()
 
+    def _init_favorites_table(self):
+        """Створення таблиці обраних товарів для збереження в SQLite"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS favorites (
+                    favorite_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(client_id, product_id),
+                    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+                )
+            """)
+            conn.commit()
+
     # --- ОПЕРАЦІЇ З КАТЕГОРІЯМИ ---
 
     def get_all_categories(self) -> List[Category]:
@@ -57,6 +74,83 @@ class DatabaseManager:
             cursor.execute("SELECT category_id, name, description FROM categories")
             rows = cursor.fetchall()
             return [Category(category_id=row[0], name=row[1], description=row[2]) for row in rows]
+
+    def get_category_name_by_id(self, category_id: int) -> str:
+        """Отримання назви категорії за її ID"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM categories WHERE category_id = ?", (category_id,))
+            row = cursor.fetchone()
+            return row[0] if row else "Інше"
+
+    # --- ОПЕРАЦІЇ З ОБРАНИМ (FAVORITES) ---
+
+    def add_to_favorites(self, client_id: int, product_id: int):
+        """Додавання товару до списку обраного користувача"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR IGNORE INTO favorites (client_id, product_id)
+                VALUES (?, ?)
+            """, (client_id, product_id))
+            conn.commit()
+
+    def remove_from_favorites(self, client_id: int, product_id: int):
+        """Видалення товару зі списку обраного користувача"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM favorites
+                WHERE client_id = ? AND product_id = ?
+            """, (client_id, product_id))
+            conn.commit()
+
+    def is_favorite(self, client_id: int, product_id: int) -> bool:
+        """Перевірка, чи знаходиться товар в обраному користувача"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 1 FROM favorites
+                WHERE client_id = ? AND product_id = ?
+            """, (client_id, product_id))
+            return cursor.fetchone() is not None
+
+    def toggle_favorite(self, client_id: int, product_id: int) -> bool:
+        """Перемикання стану обраного: повертає True, якщо додано, і False, якщо видалено"""
+        if self.is_favorite(client_id, product_id):
+            self.remove_from_favorites(client_id, product_id)
+            return False
+        else:
+            self.add_to_favorites(client_id, product_id)
+            return True
+
+    def get_favorite_product_ids(self, client_id: int) -> Set[int]:
+        """Отримання множини ID всіх обраних товарів користувача"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT product_id FROM favorites WHERE client_id = ?", (client_id,))
+            return {row[0] for row in cursor.fetchall()}
+
+    def get_favorite_products(self, client_id: int) -> List[Product]:
+        """Отримання повного списку обраних товарів конкретного користувача"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.product_id, p.category_id, p.title, p.brand, p.price, 
+                       p.stock_quantity, p.description, p.supplier_id
+                FROM favorites f
+                JOIN products p ON f.product_id = p.product_id
+                WHERE f.client_id = ?
+                ORDER BY f.favorite_id DESC
+            """, (client_id,))
+            rows = cursor.fetchall()
+            return [
+                Product(
+                    product_id=row[0], category_id=row[1], title=row[2],
+                    brand=row[3], price=row[4], stock_quantity=row[5],
+                    description=row[6], supplier_id=row[7]
+                ) for row in rows
+            ]
 
     # --- ОПЕРАЦІЇ З ПОСТАЧАЛЬНИКАМИ ---
 

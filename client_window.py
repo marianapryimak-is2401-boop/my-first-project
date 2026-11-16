@@ -1,64 +1,215 @@
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QComboBox, QTableWidget, QTableWidgetItem, QPushButton, 
-    QHeaderView, QMessageBox, QLineEdit, QSpinBox, QTabWidget,
-    QFrame, QCheckBox, QScrollArea
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, 
+    QComboBox, QPushButton, QMessageBox, QLineEdit, QTabWidget,
+    QFrame, QCheckBox, QScrollArea, QStackedWidget
 )
-from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal
 from db_manager import DatabaseManager
 from cart import CartDialog
 from orders_tab import OrdersTab
+from product_detail_page import ProductDetailPage
+from favorites_tab import FavoritesTab
 
 
-class ClientCatalogWidget(QWidget):
-    """Віджет каталогу товарів для клієнта з висувною бічною панеллю фільтрів"""
-    SIDEBAR_WIDTH = 290
+class ProductCard(QFrame):
+    """Картка товару в загальному каталозі"""
+    card_clicked = pyqtSignal(int)
+    favorite_clicked = pyqtSignal(int)
 
-    def __init__(self, db_manager):
-        super().__init__()
-        self.db = db_manager
-        self.cart = []
-        self.category_checkboxes = []
-        self.sidebar_open = False
+    def __init__(self, product, is_favorite: bool = False, parent=None):
+        super().__init__(parent)
+        self.product = product
+        self.is_favorite = is_favorite
+        self.setObjectName("ProductCard")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumWidth(250)
+        self.setStyleSheet("""
+            QFrame#ProductCard {
+                background-color: #FFFFFF;
+                border: 1px solid #CBD5E1;
+                border-radius: 10px;
+            }
+            QFrame#ProductCard:hover {
+                border: 1px solid #2563EB;
+                background-color: #F8FAFC;
+            }
+        """)
         self.init_ui()
 
     def init_ui(self):
-        # Головний горизонтальний макет: [Ліва бічна панель] + [Основний контент каталогу]
-        root_layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        # Верхній рядок: Бренд + кнопка-сердечко
+        top_row = QHBoxLayout()
+        brand_lbl = QLabel(self.product.brand)
+        brand_lbl.setStyleSheet("""
+            background-color: #F1F5F9;
+            color: #475569;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 3px 8px;
+            border-radius: 4px;
+        """)
+        top_row.addWidget(brand_lbl)
+        top_row.addStretch()
+
+        self.heart_btn = QPushButton()
+        self.heart_btn.setFixedSize(32, 32)
+        self.heart_btn.setCursor(Qt.PointingHandCursor)
+        self.heart_btn.setToolTip("Додати / видалити з обраного")
+        self.heart_btn.clicked.connect(lambda: self.favorite_clicked.emit(self.product.product_id))
+        self.update_heart_style()
+        top_row.addWidget(self.heart_btn)
+
+        layout.addLayout(top_row)
+
+        # Назва товару
+        title_lbl = QLabel(self.product.title)
+        title_lbl.setWordWrap(True)
+        title_lbl.setMinimumHeight(42)
+        title_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #0F172A; background: transparent;")
+        layout.addWidget(title_lbl)
+
+        # Наявність
+        if self.product.stock_quantity > 0:
+            stock_lbl = QLabel(f"● В наявності: {self.product.stock_quantity} шт.")
+            stock_lbl.setStyleSheet("font-size: 12px; color: #15803D; font-weight: bold; background: transparent;")
+        else:
+            stock_lbl = QLabel("● Немає в наявності")
+            stock_lbl.setStyleSheet("font-size: 12px; color: #DC2626; font-weight: bold; background: transparent;")
+        layout.addWidget(stock_lbl)
+
+        layout.addStretch()
+
+        # Нижній рядок: Ціна + кнопка «Детальніше»
+        bottom_row = QHBoxLayout()
+        price_lbl = QLabel(f"{self.product.price:.2f} грн")
+        price_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #1E293B; background: transparent;")
+        bottom_row.addWidget(price_lbl)
+
+        bottom_row.addStretch()
+
+        details_btn = QPushButton("Детальніше")
+        details_btn.setCursor(Qt.PointingHandCursor)
+        details_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: bold;
+                font-size: 12px;
+                padding: 6px 12px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1D4ED8;
+            }
+        """)
+        details_btn.clicked.connect(lambda: self.card_clicked.emit(self.product.product_id))
+        bottom_row.addWidget(details_btn)
+
+        layout.addLayout(bottom_row)
+
+    def update_heart_style(self):
+        if self.is_favorite:
+            self.heart_btn.setText("❤️")
+            self.heart_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #FEF2F2;
+                    border: 1px solid #FECACA;
+                    border-radius: 16px;
+                    font-size: 15px;
+                }
+                QPushButton:hover { background-color: #FEE2E2; }
+            """)
+        else:
+            self.heart_btn.setText("♡")
+            self.heart_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #F8FAFC;
+                    border: 1px solid #CBD5E1;
+                    border-radius: 16px;
+                    font-size: 16px;
+                    color: #64748B;
+                }
+                QPushButton:hover {
+                    background-color: #F1F5F9;
+                    color: #DC2626;
+                }
+            """)
+
+    def set_favorite(self, is_fav: bool):
+        self.is_favorite = is_fav
+        self.update_heart_style()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.card_clicked.emit(self.product.product_id)
+        super().mousePressEvent(event)
+
+
+class ClientCatalogWidget(QWidget):
+    """Віджет каталогу товарів (картки товарів) + окрема сторінка деталей товару"""
+    SIDEBAR_WIDTH = 290
+    favorites_changed = pyqtSignal()
+
+    def __init__(self, db_manager, get_client_id_func):
+        super().__init__()
+        self.db = db_manager
+        self.get_client_id = get_client_id_func
+        self.cart = []
+        self.category_checkboxes = []
+        self.card_widgets = {}
+        self.current_products = []
+        self.sidebar_open = False
+        self.return_to_favorites_callback = None
+        self.init_ui()
+
+    def init_ui(self):
+        # Використовуємо QStackedWidget для перемикання:
+        # 0 -> Загальний каталог з бічною панеллю фільтрів
+        # 1 -> Окрема сторінка детальної інформації про товар
+        self.stack = QStackedWidget(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(self.stack)
+
+        # ==========================================
+        # СТОРІНКА 0: ЗАГАЛЬНИЙ КАТАЛОГ З ФІЛЬТРАМИ
+        # ==========================================
+        catalog_page = QWidget()
+        root_layout = QHBoxLayout(catalog_page)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # ==========================================
         # 1. ЛІВА БІЧНА ПАНЕЛЬ ФІЛЬТРІВ ТА КОНТАКТІВ
-        # ==========================================
         self.sidebar_container = QFrame()
         self.sidebar_container.setMaximumWidth(0)
         self.sidebar_container.setMinimumWidth(0)
+        self.sidebar_container.setObjectName("SidebarContainer")
         self.sidebar_container.setStyleSheet("""
             QFrame#SidebarContainer {
                 background-color: #F8FAFC;
                 border-right: 1px solid #CBD5E1;
             }
         """)
-        self.sidebar_container.setObjectName("SidebarContainer")
 
         sidebar_outer_layout = QVBoxLayout(self.sidebar_container)
         sidebar_outer_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_outer_layout.setSpacing(0)
 
-        # Внутрішній контейнер фіксованої ширини, щоб елементи не стискалися під час анімації
         self.sidebar_inner = QWidget()
         self.sidebar_inner.setFixedWidth(self.SIDEBAR_WIDTH)
         sidebar_layout = QVBoxLayout(self.sidebar_inner)
         sidebar_layout.setContentsMargins(14, 12, 14, 12)
         sidebar_layout.setSpacing(10)
 
-        # --- Верхня шапка панелі: "Фільтри" + кнопка "✕" ---
         sidebar_header = QHBoxLayout()
         filters_title = QLabel("Фільтри")
         filters_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0F172A;")
         sidebar_header.addWidget(filters_title)
-
         sidebar_header.addStretch()
 
         self.close_sidebar_btn = QPushButton("✕")
@@ -81,16 +232,13 @@ class ClientCatalogWidget(QWidget):
         """)
         self.close_sidebar_btn.clicked.connect(self.close_sidebar)
         sidebar_header.addWidget(self.close_sidebar_btn)
-
         sidebar_layout.addLayout(sidebar_header)
 
-        # Розділювач
         line_top = QFrame()
         line_top.setFrameShape(QFrame.HLine)
         line_top.setStyleSheet("color: #CBD5E1;")
         sidebar_layout.addWidget(line_top)
 
-        # --- Прокручувана область для блоків фільтрації ---
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
@@ -102,7 +250,6 @@ class ClientCatalogWidget(QWidget):
         filters_body_layout.setContentsMargins(0, 2, 4, 2)
         filters_body_layout.setSpacing(10)
 
-        # БЛОК: Категорія (чекбокси)
         cat_label = QLabel("Категорія")
         cat_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E293B;")
         filters_body_layout.addWidget(cat_label)
@@ -111,7 +258,6 @@ class ClientCatalogWidget(QWidget):
         self.categories_box.setSpacing(5)
         filters_body_layout.addLayout(self.categories_box)
 
-        # БЛОК: Фільтр ціни
         price_section_label = QLabel("Ціна (грн)")
         price_section_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E293B; margin-top: 4px;")
         filters_body_layout.addWidget(price_section_label)
@@ -138,7 +284,6 @@ class ClientCatalogWidget(QWidget):
         price_to_layout.addWidget(self.max_price_input)
         filters_body_layout.addLayout(price_to_layout)
 
-        # БЛОК: Сортування
         sort_label = QLabel("Сортування")
         sort_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E293B; margin-top: 4px;")
         filters_body_layout.addWidget(sort_label)
@@ -151,7 +296,6 @@ class ClientCatalogWidget(QWidget):
         self.sort_combo.setStyleSheet("background-color: #FFFFFF; padding: 5px; border: 1px solid #CBD5E1; border-radius: 4px;")
         filters_body_layout.addWidget(self.sort_combo)
 
-        # КНОПКИ: Застосувати та Скинути фільтри
         buttons_layout = QVBoxLayout()
         buttons_layout.setSpacing(6)
         buttons_layout.setContentsMargins(0, 8, 0, 4)
@@ -167,9 +311,7 @@ class ClientCatalogWidget(QWidget):
                 border: none;
                 border-radius: 5px;
             }
-            QPushButton:hover {
-                background-color: #1D4ED8;
-            }
+            QPushButton:hover { background-color: #1D4ED8; }
         """)
         self.apply_btn.clicked.connect(self.load_products)
         buttons_layout.addWidget(self.apply_btn)
@@ -184,9 +326,7 @@ class ClientCatalogWidget(QWidget):
                 border: 1px solid #CBD5E1;
                 border-radius: 5px;
             }
-            QPushButton:hover {
-                background-color: #CBD5E1;
-            }
+            QPushButton:hover { background-color: #CBD5E1; }
         """)
         self.reset_btn.clicked.connect(self.reset_filters)
         buttons_layout.addWidget(self.reset_btn)
@@ -197,7 +337,7 @@ class ClientCatalogWidget(QWidget):
         scroll_area.setWidget(scroll_content)
         sidebar_layout.addWidget(scroll_area, stretch=1)
 
-        # --- БЛОК: Контакти (у самому низу бічної панелі) ---
+        # БЛОК: Контакти внизу бічної панелі
         contacts_frame = QFrame()
         contacts_frame.setStyleSheet("""
             QFrame {
@@ -229,22 +369,18 @@ class ClientCatalogWidget(QWidget):
         sidebar_layout.addWidget(contacts_frame)
         sidebar_outer_layout.addWidget(self.sidebar_inner)
 
-        # Анімація відкриття/закриття бічної панелі
         self.sidebar_anim = QPropertyAnimation(self.sidebar_container, b"maximumWidth")
         self.sidebar_anim.setDuration(220)
         self.sidebar_anim.setEasingCurve(QEasingCurve.InOutCubic)
 
         root_layout.addWidget(self.sidebar_container)
 
-        # ==========================================
-        # 2. ОСНОВНИЙ КОНТЕНТ КАТАЛОГУ ТОВАРІВ
-        # ==========================================
+        # 2. ОСНОВНА ОБЛАСТЬ КАТАЛОГУ (ВЕРХНЯ ПАНЕЛЬ + СІТКА КАРТОК ТОВАРІВ)
         main_content = QWidget()
         main_layout = QVBoxLayout(main_content)
         main_layout.setContentsMargins(12, 10, 12, 10)
         main_layout.setSpacing(10)
 
-        # Верхня панель: кнопка ☰ зліва, швидкий пошук, деталі та кошик
         top_bar = QHBoxLayout()
 
         self.menu_btn = QPushButton("☰")
@@ -260,9 +396,7 @@ class ClientCatalogWidget(QWidget):
                 border-radius: 5px;
                 color: #0F172A;
             }
-            QPushButton:hover {
-                background-color: #E2E8F0;
-            }
+            QPushButton:hover { background-color: #E2E8F0; }
         """)
         self.menu_btn.clicked.connect(self.toggle_sidebar)
         top_bar.addWidget(self.menu_btn)
@@ -273,45 +407,82 @@ class ClientCatalogWidget(QWidget):
         self.search_input.textChanged.connect(self.load_products)
         top_bar.addWidget(self.search_input)
 
-        self.details_btn = QPushButton("Деталі товару")
-        self.details_btn.clicked.connect(self.show_details)
-        top_bar.addWidget(self.details_btn)
-
         self.cart_btn = QPushButton("🛒 Кошик (0)")
+        self.cart_btn.setCursor(Qt.PointingHandCursor)
+        self.cart_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F8FAFC;
+                border: 1px solid #CBD5E1;
+                border-radius: 5px;
+                padding: 6px 14px;
+                font-weight: bold;
+                color: #0F172A;
+            }
+            QPushButton:hover { background-color: #E2E8F0; }
+        """)
         self.cart_btn.clicked.connect(self.open_cart)
         top_bar.addWidget(self.cart_btn)
 
         main_layout.addLayout(top_bar)
 
-        # Таблиця товарів (займає весь простір, коли панель закрита)
-        self.products_table = QTableWidget()
-        self.products_table.setColumnCount(5)
-        self.products_table.setHorizontalHeaderLabels(["ID", "Назва", "Бренд", "Ціна (грн)", "На складі"])
-        self.products_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.products_table.setSelectionBehavior(QTableWidget.SelectRows)
-        main_layout.addWidget(self.products_table)
+        # Область прокрутки для карток товарів
+        self.cards_scroll = QScrollArea()
+        self.cards_scroll.setWidgetResizable(True)
+        self.cards_scroll.setFrameShape(QFrame.NoFrame)
+        self.cards_scroll.setStyleSheet("background-color: #F1F5F9; border-radius: 8px;")
 
-        # Нижня панель додавання товару в кошик
-        cart_action_layout = QHBoxLayout()
-        cart_action_layout.addWidget(QLabel("Кількість для покупки:"))
-        self.quantity_spin = QSpinBox()
-        self.quantity_spin.setRange(1, 100)
-        cart_action_layout.addWidget(self.quantity_spin)
+        self.cards_container = QWidget()
+        self.cards_container.setStyleSheet("background-color: #F1F5F9;")
+        self.cards_grid = QGridLayout(self.cards_container)
+        self.cards_grid.setContentsMargins(12, 12, 12, 12)
+        self.cards_grid.setSpacing(12)
+        self.cards_scroll.setWidget(self.cards_container)
 
-        self.add_to_cart_btn = QPushButton("Додати до кошика")
-        self.add_to_cart_btn.clicked.connect(self.add_to_cart)
-        cart_action_layout.addWidget(self.add_to_cart_btn)
-
-        main_layout.addLayout(cart_action_layout)
+        main_layout.addWidget(self.cards_scroll)
 
         root_layout.addWidget(main_content, stretch=1)
+        self.stack.addWidget(catalog_page)
+
+        # ==========================================
+        # СТОРІНКА 1: ДЕТАЛЬНА СТОРІНКА ТОВАРУ
+        # ==========================================
+        self.detail_page = ProductDetailPage(
+            db_manager=self.db,
+            cart_list=self.cart,
+            get_client_id_func=self.get_client_id
+        )
+        self.detail_page.back_requested.connect(self.close_product_detail)
+        self.detail_page.favorite_toggled.connect(self.on_detail_favorite_toggled)
+        self.detail_page.cart_updated.connect(self.update_cart_btn_text)
+        self.stack.addWidget(self.detail_page)
 
         self.load_categories()
+
+    # --- НАВІГАЦІЯ НА СТОРІНКУ ТОВАРУ ---
+
+    def open_product_detail(self, product_id: int, return_callback=None):
+        """Відкриває окрему сторінку конкретного товару"""
+        self.return_to_favorites_callback = return_callback
+        self.detail_page.load_product(product_id)
+        self.stack.setCurrentIndex(1)
+
+    def close_product_detail(self):
+        """Повернення зі сторінки товару назад у каталог або вкладку «Обране»"""
+        self.stack.setCurrentIndex(0)
+        self.sync_card_hearts()
+        if self.return_to_favorites_callback:
+            cb = self.return_to_favorites_callback
+            self.return_to_favorites_callback = None
+            cb()
+
+    def on_detail_favorite_toggled(self, product_id: int, is_fav: bool):
+        if product_id in self.card_widgets:
+            self.card_widgets[product_id].set_favorite(is_fav)
+        self.favorites_changed.emit()
 
     # --- УПРАВЛІННЯ БІЧНОЮ ПАНЕЛЛЮ ---
 
     def toggle_sidebar(self):
-        """Відкриття або закриття бічної панелі при натисканні на ☰"""
         if self.sidebar_open:
             self.close_sidebar()
         else:
@@ -331,11 +502,9 @@ class ClientCatalogWidget(QWidget):
         self.sidebar_anim.setEndValue(0)
         self.sidebar_anim.start()
 
-    # --- РОБОТА З КАТЕГОРІЯМИ ТА ФІЛЬТРАМИ ---
+    # --- КАТЕГОРІЇ, КАРТКИ ТОВАРІВ ТА ФІЛЬТРИ ---
 
     def load_categories(self):
-        """Динамічне завантаження категорій у вигляді чекбоксів"""
-        # Очищення попередніх чекбоксів
         for cb in self.category_checkboxes:
             self.categories_box.removeWidget(cb)
             cb.deleteLater()
@@ -352,15 +521,9 @@ class ClientCatalogWidget(QWidget):
         self.load_products()
 
     def _get_selected_category_ids(self):
-        """Повертає список ID обраних категорій"""
-        selected = []
-        for cb in self.category_checkboxes:
-            if cb.isChecked():
-                selected.append(cb.property("category_id"))
-        return selected
+        return [cb.property("category_id") for cb in self.category_checkboxes if cb.isChecked()]
 
     def load_products(self):
-        """Застосування обраних категорій, діапазону цін, пошуку та сортування"""
         selected_category_ids = self._get_selected_category_ids()
         query = self.search_input.text().strip()
         sort_by = self.sort_combo.currentData() or "default"
@@ -382,33 +545,65 @@ class ClientCatalogWidget(QWidget):
             except ValueError:
                 pass
 
-        products = self.db.search_products(
+        self.current_products = self.db.search_products(
             query=query,
             category_ids=selected_category_ids if selected_category_ids else None,
             min_price=min_price,
             max_price=max_price,
             sort_by=sort_by
         )
+        self.render_product_cards()
 
-        if not products:
-            self.products_table.setRowCount(1)
-            self.products_table.setItem(0, 0, QTableWidgetItem(""))
-            self.products_table.setItem(0, 1, QTableWidgetItem("Товарів не знайдено"))
-            self.products_table.setItem(0, 2, QTableWidgetItem(""))
-            self.products_table.setItem(0, 3, QTableWidgetItem(""))
-            self.products_table.setItem(0, 4, QTableWidgetItem(""))
+    def render_product_cards(self):
+        """Відображення товарів у вигляді сітки карток"""
+        while self.cards_grid.count():
+            item = self.cards_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.card_widgets.clear()
+
+        if not self.current_products:
+            empty_lbl = QLabel("Товарів за вибраними критеріями не знайдено.")
+            empty_lbl.setAlignment(Qt.AlignCenter)
+            empty_lbl.setStyleSheet("font-size: 15px; color: #64748B; padding: 30px;")
+            self.cards_grid.addWidget(empty_lbl, 0, 0)
             return
 
-        self.products_table.setRowCount(len(products))
-        for row, prod in enumerate(products):
-            self.products_table.setItem(row, 0, QTableWidgetItem(str(prod.product_id)))
-            self.products_table.setItem(row, 1, QTableWidgetItem(prod.title))
-            self.products_table.setItem(row, 2, QTableWidgetItem(prod.brand))
-            self.products_table.setItem(row, 3, QTableWidgetItem(f"{prod.price:.2f}"))
-            self.products_table.setItem(row, 4, QTableWidgetItem(str(prod.stock_quantity)))
+        client_id = self.get_client_id()
+        favorite_ids = self.db.get_favorite_product_ids(client_id)
+
+        available_width = max(600, self.cards_scroll.viewport().width())
+        cols = max(2, available_width // 275)
+
+        for idx, prod in enumerate(self.current_products):
+            row = idx // cols
+            col = idx % cols
+            card = ProductCard(prod, is_favorite=(prod.product_id in favorite_ids))
+            card.card_clicked.connect(lambda pid: self.open_product_detail(pid))
+            card.favorite_clicked.connect(self.toggle_card_favorite)
+            self.cards_grid.addWidget(card, row, col)
+            self.card_widgets[prod.product_id] = card
+
+        # Додаємо розтягувач знизу, щоб картки не розтягувались по вертикалі при малій кількості
+        total_rows = (len(self.current_products) + cols - 1) // cols
+        self.cards_grid.setRowStretch(total_rows, 1)
+
+    def toggle_card_favorite(self, product_id: int):
+        """Додавання / видалення товару з обраного при натисканні на сердечко картки"""
+        client_id = self.get_client_id()
+        is_fav = self.db.toggle_favorite(client_id, product_id)
+        if product_id in self.card_widgets:
+            self.card_widgets[product_id].set_favorite(is_fav)
+        self.favorites_changed.emit()
+
+    def sync_card_hearts(self):
+        """Синхронізація іконок сердечок на картках із актуальними даними SQLite"""
+        client_id = self.get_client_id()
+        favorite_ids = self.db.get_favorite_product_ids(client_id)
+        for pid, card in self.card_widgets.items():
+            card.set_favorite(pid in favorite_ids)
 
     def reset_filters(self):
-        """Очищення всіх фільтрів та повернення стандартного списку товарів"""
         for cb in self.category_checkboxes:
             cb.setChecked(False)
 
@@ -422,71 +617,16 @@ class ClientCatalogWidget(QWidget):
 
         self.load_products()
 
-    def _get_selected_product_id(self):
-        selected = self.products_table.currentRow()
-        if selected < 0:
-            QMessageBox.warning(self, "Увага", "Оберіть товар у таблиці.")
-            return None
-        
-        item = self.products_table.item(selected, 0)
-        if not item or not item.text().isdigit():
-            QMessageBox.warning(self, "Увага", "Обрано порожній рядок або товари відсутні.")
-            return None
-            
-        return int(item.text())
-
-    def show_details(self):
-        prod_id = self._get_selected_product_id()
-        if prod_id is None:
-            return
-
-        prod = self.db.get_product_by_id(prod_id)
-        if prod:
-            info = (
-                f"<b>ID:</b> {prod.product_id}<br>"
-                f"<b>Назва:</b> {prod.title}<br>"
-                f"<b>Бренд:</b> {prod.brand}<br>"
-                f"<b>Ціна:</b> {prod.price:.2f} грн<br>"
-                f"<b>Кількість:</b> {prod.stock_quantity} шт.<br><br>"
-                f"<b>Опис:</b><br>{prod.description or 'Опис відсутній'}"
-            )
-            QMessageBox.information(self, f"Деталі товару №{prod.product_id}", info)
-
     def update_cart_btn_text(self):
         total_count = sum(qty for _, qty in self.cart)
         self.cart_btn.setText(f"🛒 Кошик ({total_count})")
-
-    def add_to_cart(self):
-        prod_id = self._get_selected_product_id()
-        if prod_id is None:
-            return
-
-        prod = self.db.get_product_by_id(prod_id)
-        qty = self.quantity_spin.value()
-
-        existing_qty = sum(item_qty for p, item_qty in self.cart if p.product_id == prod.product_id)
-
-        if existing_qty + qty > prod.stock_quantity:
-            QMessageBox.warning(
-                self, "Помилка", 
-                f"Недостатня кількість на складі!\nДоступно: {prod.stock_quantity} шт. (У кошику вже: {existing_qty} шт.)"
-            )
-            return
-
-        for i, (p, item_qty) in enumerate(self.cart):
-            if p.product_id == prod.product_id:
-                self.cart[i] = (p, item_qty + qty)
-                break
-        else:
-            self.cart.append((prod, qty))
-
-        self.update_cart_btn_text()
-        QMessageBox.information(self, "Кошик", f"Товар «{prod.title}» ({qty} шт.) додано до кошика!")
 
     def open_cart(self):
         dialog = CartDialog(self.cart, self.db, parent=self)
         dialog.exec_()
         self.update_cart_btn_text()
+        if self.stack.currentIndex() == 1 and self.detail_page.current_product:
+            self.detail_page.load_product(self.detail_page.current_product.product_id)
 
 
 class ClientWindow(QMainWindow):
@@ -496,24 +636,54 @@ class ClientWindow(QMainWindow):
         self.db = db_manager or DatabaseManager()
         self.client_id = client_id
         self.setWindowTitle("Магазин комп'ютерної техніки — Клієнт")
-        self.resize(1050, 680)
+        self.resize(1100, 700)
 
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.catalog_widget = ClientCatalogWidget(self.db)
+        # 1. Вкладка «Каталог товарів»
+        self.catalog_widget = ClientCatalogWidget(self.db, self.get_active_client_id)
+
+        # 2. Вкладка «Обране» (поруч із «Мої замовлення»)
+        self.favorites_widget = FavoritesTab(self.db, self.get_active_client_id)
+
+        # 3. Вкладка «Мої замовлення»
         self.orders_widget = OrdersTab(self.db, client_id=self.client_id, is_admin=False)
 
         self.tabs.addTab(self.catalog_widget, "Каталог товарів")
+        self.tabs.addTab(self.favorites_widget, "❤️ Обране")
         self.tabs.addTab(self.orders_widget, "Мої замовлення")
 
+        # Синхронізація між каталогом та вкладкою «Обране»
+        self.catalog_widget.favorites_changed.connect(self.favorites_widget.load_favorites)
+        self.favorites_widget.favorite_removed.connect(lambda _: self.catalog_widget.sync_card_hearts())
+        self.favorites_widget.open_product_requested.connect(self.open_product_from_favorites)
+
         self.tabs.currentChanged.connect(self.on_tab_change)
+
+    def get_active_client_id(self) -> int:
+        """Повертає ID авторизованого клієнта або базовий ID=1 для збереження в SQLite"""
+        return self.client_id if self.client_id is not None else 1
+
+    def open_product_from_favorites(self, product_id: int):
+        """Перехід зі списку «Обране» на сторінку конкретного товару"""
+        self.tabs.setCurrentIndex(0)
+        self.catalog_widget.open_product_detail(
+            product_id,
+            return_callback=lambda: self.tabs.setCurrentIndex(1)
+        )
 
     def set_client_id(self, client_id):
         self.client_id = client_id
         self.orders_widget.set_client_id(client_id)
+        self.favorites_widget.load_favorites()
+        self.catalog_widget.sync_card_hearts()
 
     def on_tab_change(self, index):
-        if index == 1:
+        if index == 0:
+            self.catalog_widget.sync_card_hearts()
+        elif index == 1:
+            self.favorites_widget.load_favorites()
+        elif index == 2:
             self.orders_widget.load_orders()
             

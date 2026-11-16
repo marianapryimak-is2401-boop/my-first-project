@@ -1,8 +1,8 @@
 import re
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QSpinBox
+    QGroupBox, QScrollArea, QTableWidget, QTableWidgetItem,
+    QHeaderView, QMessageBox, QSpinBox, QFrame
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -153,26 +153,13 @@ class ProductDetailPage(QWidget):
 
     def init_ui(self):
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(16, 12, 16, 12)
-        root_layout.setSpacing(12)
+        root_layout.setContentsMargins(14, 10, 14, 10)
+        root_layout.setSpacing(10)
 
         # Верхня панель навігації
         top_nav = QHBoxLayout()
         self.back_btn = QPushButton("← Назад")
         self.back_btn.setCursor(Qt.PointingHandCursor)
-        self.back_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #F1F5F9;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 7px 14px;
-                font-weight: bold;
-                color: #1E293B;
-            }
-            QPushButton:hover {
-                background-color: #E2E8F0;
-            }
-        """)
         self.back_btn.clicked.connect(self.back_requested.emit)
         top_nav.addWidget(self.back_btn)
 
@@ -185,7 +172,6 @@ class ProductDetailPage(QWidget):
 
         root_layout.addLayout(top_nav)
 
-        # Прокручувана область сторінки товару
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -193,201 +179,86 @@ class ProductDetailPage(QWidget):
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(0, 0, 6, 0)
-        content_layout.setSpacing(14)
+        content_layout.setSpacing(12)
 
-        # --- Основна картка заголовка, ціни, наявності та вибору кількості ---
-        header_card = QFrame()
-        header_card.setStyleSheet("""
-            QFrame#DetailHeaderCard {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 10px;
-            }
-        """)
-        header_card.setObjectName("DetailHeaderCard")
-        header_layout = QVBoxLayout(header_card)
-        header_layout.setContentsMargins(18, 16, 18, 16)
-        header_layout.setSpacing(10)
+        # Основна інформація про товар
+        header_box = QGroupBox("Інформація про товар")
+        header_layout = QVBoxLayout(header_box)
+        header_layout.setSpacing(8)
 
-        # Категорія та бренд
         meta_row = QHBoxLayout()
         self.category_badge = QLabel("Категорія: —")
-        self.category_badge.setStyleSheet("""
-            background-color: #EFF6FF;
-            color: #1D4ED8;
-            border: 1px solid #BFDBFE;
-            border-radius: 4px;
-            padding: 3px 8px;
-            font-weight: bold;
-            font-size: 12px;
-        """)
         meta_row.addWidget(self.category_badge)
-
+        meta_row.addSpacing(16)
         self.brand_label = QLabel("Бренд: —")
-        self.brand_label.setStyleSheet("color: #475569; font-size: 13px; font-weight: bold; margin-left: 8px;")
         meta_row.addWidget(self.brand_label)
         meta_row.addStretch()
         header_layout.addLayout(meta_row)
 
-        # Повна назва товару
-        self.title_label = QLabel("Назва товару")
+        self.title_label = QLabel("<b>Назва товару</b>")
         self.title_label.setWordWrap(True)
-        self.title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #0F172A;")
         header_layout.addWidget(self.title_label)
 
-        # Ціна та наявність на складі
         price_stock_row = QHBoxLayout()
-        self.price_label = QLabel("0.00 грн")
-        self.price_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #16A34A;")
+        self.price_label = QLabel("<b>0.00 грн</b>")
         price_stock_row.addWidget(self.price_label)
-
         price_stock_row.addSpacing(20)
-
         self.stock_label = QLabel("На складі: 0 шт.")
-        self.stock_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #334155;")
         price_stock_row.addWidget(self.stock_label)
         price_stock_row.addStretch()
         header_layout.addLayout(price_stock_row)
 
-        # Розділювач перед блоком покупки
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: #E2E8F0;")
-        header_layout.addWidget(sep)
-
-        # --- Блок вибору кількості («−» та «+») + Загальна вартість + «Додати в кошик» ---
+        # Блок вибору кількості («−» та «+») + Загальна вартість + «Додати в кошик»
         buy_row = QHBoxLayout()
-        buy_row.setSpacing(10)
+        buy_row.setSpacing(8)
 
-        qty_caption = QLabel("Кількість:")
-        qty_caption.setStyleSheet("font-size: 14px; font-weight: bold; color: #1E293B;")
-        buy_row.addWidget(qty_caption)
+        buy_row.addWidget(QLabel("Кількість:"))
 
         self.minus_btn = QPushButton("−")
-        self.minus_btn.setFixedSize(34, 34)
+        self.minus_btn.setFixedSize(32, 32)
         self.minus_btn.setCursor(Qt.PointingHandCursor)
-        self.minus_btn.setStyleSheet("""
-            QPushButton {
-                font-size: 18px;
-                font-weight: bold;
-                background-color: #F1F5F9;
-                border: 1px solid #CBD5E1;
-                border-radius: 5px;
-            }
-            QPushButton:hover:enabled { background-color: #E2E8F0; }
-            QPushButton:disabled { color: #94A3B8; }
-        """)
         self.minus_btn.clicked.connect(self.decrease_quantity)
         buy_row.addWidget(self.minus_btn)
 
         self.qty_spin = QSpinBox()
         self.qty_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.qty_spin.setAlignment(Qt.AlignCenter)
-        self.qty_spin.setFixedSize(64, 34)
-        self.qty_spin.setStyleSheet("""
-            QSpinBox {
-                font-size: 15px;
-                font-weight: bold;
-                border: 1px solid #CBD5E1;
-                border-radius: 5px;
-                background-color: #FFFFFF;
-            }
-        """)
+        self.qty_spin.setFixedSize(60, 32)
         self.qty_spin.valueChanged.connect(self.on_quantity_changed)
         buy_row.addWidget(self.qty_spin)
 
         self.plus_btn = QPushButton("+")
-        self.plus_btn.setFixedSize(34, 34)
+        self.plus_btn.setFixedSize(32, 32)
         self.plus_btn.setCursor(Qt.PointingHandCursor)
-        self.plus_btn.setStyleSheet("""
-            QPushButton {
-                font-size: 18px;
-                font-weight: bold;
-                background-color: #F1F5F9;
-                border: 1px solid #CBD5E1;
-                border-radius: 5px;
-            }
-            QPushButton:hover:enabled { background-color: #E2E8F0; }
-            QPushButton:disabled { color: #94A3B8; }
-        """)
         self.plus_btn.clicked.connect(self.increase_quantity)
         buy_row.addWidget(self.plus_btn)
 
-        buy_row.addSpacing(18)
+        buy_row.addSpacing(16)
 
-        self.total_price_label = QLabel("Загальна вартість: 0.00 грн")
-        self.total_price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #0F172A;")
+        self.total_price_label = QLabel("<b>Загальна вартість: 0.00 грн</b>")
         buy_row.addWidget(self.total_price_label)
 
         buy_row.addStretch()
 
         self.add_to_cart_btn = QPushButton("🛒 Додати в кошик")
         self.add_to_cart_btn.setCursor(Qt.PointingHandCursor)
-        self.add_to_cart_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 9px 20px;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover:enabled {
-                background-color: #1D4ED8;
-            }
-            QPushButton:disabled {
-                background-color: #94A3B8;
-            }
-        """)
         self.add_to_cart_btn.clicked.connect(self.add_current_to_cart)
         buy_row.addWidget(self.add_to_cart_btn)
 
         header_layout.addLayout(buy_row)
-        content_layout.addWidget(header_card)
+        content_layout.addWidget(header_box)
 
-        # --- Блок детального опису ---
-        desc_card = QFrame()
-        desc_card.setStyleSheet("""
-            QFrame#DetailDescCard {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 10px;
-            }
-        """)
-        desc_card.setObjectName("DetailDescCard")
-        desc_layout = QVBoxLayout(desc_card)
-        desc_layout.setContentsMargins(18, 14, 18, 14)
-        desc_layout.setSpacing(6)
-
-        desc_heading = QLabel("Детальний опис")
-        desc_heading.setStyleSheet("font-size: 15px; font-weight: bold; color: #0F172A;")
-        desc_layout.addWidget(desc_heading)
-
+        # Детальний опис
+        desc_box = QGroupBox("Детальний опис")
+        desc_layout = QVBoxLayout(desc_box)
         self.description_label = QLabel("Опис відсутній.")
         self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet("font-size: 13px; color: #334155; line-height: 1.4;")
         desc_layout.addWidget(self.description_label)
+        content_layout.addWidget(desc_box)
 
-        content_layout.addWidget(desc_card)
-
-        # --- Блок технічних характеристик ---
-        specs_card = QFrame()
-        specs_card.setStyleSheet("""
-            QFrame#DetailSpecsCard {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 10px;
-            }
-        """)
-        specs_card.setObjectName("DetailSpecsCard")
-        specs_layout = QVBoxLayout(specs_card)
-        specs_layout.setContentsMargins(18, 14, 18, 14)
-        specs_layout.setSpacing(8)
-
-        specs_heading = QLabel("Технічні характеристики")
-        specs_heading.setStyleSheet("font-size: 15px; font-weight: bold; color: #0F172A;")
-        specs_layout.addWidget(specs_heading)
+        # Технічні характеристики
+        specs_box = QGroupBox("Технічні характеристики")
+        specs_layout = QVBoxLayout(specs_box)
 
         self.specs_table = QTableWidget()
         self.specs_table.setColumnCount(2)
@@ -400,14 +271,13 @@ class ProductDetailPage(QWidget):
         self.specs_table.setMinimumHeight(210)
         specs_layout.addWidget(self.specs_table)
 
-        content_layout.addWidget(specs_card)
+        content_layout.addWidget(specs_box)
         content_layout.addStretch()
 
         scroll.setWidget(content_widget)
         root_layout.addWidget(scroll)
 
     def load_product(self, product_id: int):
-        """Завантаження актуальних даних товару з SQLite на сторінку"""
         product = self.db.get_product_by_id(product_id)
         if not product:
             QMessageBox.warning(self, "Помилка", "Товар не знайдено в базі даних.")
@@ -419,21 +289,18 @@ class ProductDetailPage(QWidget):
 
         self.category_badge.setText(f"Категорія: {category_name}")
         self.brand_label.setText(f"Бренд: {product.brand}")
-        self.title_label.setText(product.title)
-        self.price_label.setText(f"{product.price:.2f} грн")
+        self.title_label.setText(f"<h3>{product.title}</h3>")
+        self.price_label.setText(f"<b>Ціна: {product.price:.2f} грн</b>")
 
-        # Опис
         desc_text = product.description.strip() if product.description else ""
         if not desc_text:
             desc_text = f"{product.title} від бренду {product.brand} — надійне рішення у категорії «{category_name}»."
         self.description_label.setText(desc_text)
 
-        # Налаштування наявності та лічильника кількості
         stock = product.stock_quantity
         self.qty_spin.blockSignals(True)
         if stock > 0:
             self.stock_label.setText(f"В наявності на складі: {stock} шт.")
-            self.stock_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #15803D;")
             self.qty_spin.setRange(1, stock)
             self.qty_spin.setValue(1)
             self.qty_spin.setEnabled(True)
@@ -442,7 +309,6 @@ class ProductDetailPage(QWidget):
             self.add_to_cart_btn.setEnabled(True)
         else:
             self.stock_label.setText("Немає в наявності (0 шт.)")
-            self.stock_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #DC2626;")
             self.qty_spin.setRange(0, 0)
             self.qty_spin.setValue(0)
             self.qty_spin.setEnabled(False)
@@ -454,46 +320,18 @@ class ProductDetailPage(QWidget):
         self.update_total_price()
         self.update_favorite_button_state()
 
-        # Заповнення таблиці технічних характеристик
         specs = build_category_specifications(product, category_name)
         self.specs_table.setRowCount(len(specs))
         for row, (spec_name, spec_val) in enumerate(specs):
-            name_item = QTableWidgetItem(spec_name)
-            val_item = QTableWidgetItem(spec_val)
-            self.specs_table.setItem(row, 0, name_item)
-            self.specs_table.setItem(row, 1, val_item)
+            self.specs_table.setItem(row, 0, QTableWidgetItem(spec_name))
+            self.specs_table.setItem(row, 1, QTableWidgetItem(spec_val))
 
     def update_favorite_button_state(self):
         if not self.current_product:
             return
         client_id = self.get_client_id()
         is_fav = self.db.is_favorite(client_id, self.current_product.product_id)
-        if is_fav:
-            self.fav_btn.setText("❤️ В обраному")
-            self.fav_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #FEF2F2;
-                    border: 1px solid #FECACA;
-                    border-radius: 6px;
-                    padding: 7px 14px;
-                    font-weight: bold;
-                    color: #DC2626;
-                }
-                QPushButton:hover { background-color: #FEE2E2; }
-            """)
-        else:
-            self.fav_btn.setText("♡ Додати в обране")
-            self.fav_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #FFFFFF;
-                    border: 1px solid #CBD5E1;
-                    border-radius: 6px;
-                    padding: 7px 14px;
-                    font-weight: bold;
-                    color: #334155;
-                }
-                QPushButton:hover { background-color: #F8FAFC; }
-            """)
+        self.fav_btn.setText("♥ В обраному" if is_fav else "♡ Додати в обране")
 
     def on_toggle_favorite(self):
         if not self.current_product:
@@ -533,17 +371,16 @@ class ProductDetailPage(QWidget):
 
     def update_total_price(self):
         if not self.current_product:
-            self.total_price_label.setText("Загальна вартість: 0.00 грн")
+            self.total_price_label.setText("<b>Загальна вартість: 0.00 грн</b>")
             return
         qty = max(0, self.qty_spin.value())
         total = self.current_product.price * qty
-        self.total_price_label.setText(f"Загальна вартість: {total:.2f} грн")
+        self.total_price_label.setText(f"<b>Загальна вартість: {total:.2f} грн</b>")
 
     def add_current_to_cart(self):
         if not self.current_product:
             return
 
-        # Перезавантажуємо актуальний залишок із БД
         fresh_prod = self.db.get_product_by_id(self.current_product.product_id)
         if not fresh_prod or fresh_prod.stock_quantity <= 0:
             QMessageBox.warning(self, "Немає в наявності", "На жаль, цей товар закінчився на складі.")

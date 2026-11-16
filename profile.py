@@ -2,11 +2,11 @@ import os
 import re
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QPushButton, QFrame, QScrollArea, QTableWidget, QTableWidgetItem,
-    QHeaderView, QDialog, QLineEdit, QMessageBox
+    QPushButton, QGroupBox, QScrollArea, QTableWidget, QTableWidgetItem,
+    QHeaderView, QDialog, QLineEdit, QMessageBox, QFrame
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QUrl
-from PyQt5.QtGui import QDesktopServices, QColor
+from PyQt5.QtGui import QDesktopServices
 
 
 class EditProfileDialog(QDialog):
@@ -16,99 +16,42 @@ class EditProfileDialog(QDialog):
         self.db = db_manager
         self.client_id = client_id
         self.setWindowTitle("Редагування профілю")
-        self.resize(440, 310)
+        self.resize(420, 270)
         self.init_ui()
         self.load_current_data()
 
     def init_ui(self):
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #F8FAFC;
-            }
-            QLabel#FieldTitle {
-                font-size: 12px;
-                font-weight: bold;
-                color: #334155;
-            }
-            QLineEdit {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 8px 10px;
-                font-size: 13px;
-                color: #0F172A;
-            }
-            QLineEdit:focus {
-                border: 1px solid #2563EB;
-            }
-        """)
-
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
 
-        header = QLabel("Редагування особистих даних")
-        header.setStyleSheet("font-size: 17px; font-weight: bold; color: #0F172A; margin-bottom: 4px;")
-        layout.addWidget(header)
+        layout.addWidget(QLabel("<b>Редагування особистих даних</b>"))
 
-        lbl_name = QLabel("Ім’я та прізвище *")
-        lbl_name.setObjectName("FieldTitle")
+        layout.addWidget(QLabel("Ім’я та прізвище *"))
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Введіть ім’я та прізвище")
-        layout.addWidget(lbl_name)
         layout.addWidget(self.name_input)
 
-        lbl_phone = QLabel("Номер телефону *")
-        lbl_phone.setObjectName("FieldTitle")
+        layout.addWidget(QLabel("Номер телефону *"))
         self.phone_input = QLineEdit()
         self.phone_input.setPlaceholderText("+380671234567")
-        layout.addWidget(lbl_phone)
         layout.addWidget(self.phone_input)
 
-        lbl_email = QLabel("Електронна пошта *")
-        lbl_email.setObjectName("FieldTitle")
+        layout.addWidget(QLabel("Електронна пошта *"))
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("buyer@example.com")
-        layout.addWidget(lbl_email)
         layout.addWidget(self.email_input)
 
         layout.addStretch()
 
         btns_row = QHBoxLayout()
-        btns_row.setSpacing(10)
-
         cancel_btn = QPushButton("Скасувати")
-        cancel_btn.setCursor(Qt.PointingHandCursor)
-        cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #E2E8F0;
-                color: #1E293B;
-                padding: 8px 16px;
-                border: none;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QPushButton:hover { background-color: #CBD5E1; }
-        """)
         cancel_btn.clicked.connect(self.reject)
         btns_row.addWidget(cancel_btn)
 
         btns_row.addStretch()
 
         save_btn = QPushButton("Зберегти зміни")
-        save_btn.setCursor(Qt.PointingHandCursor)
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                font-weight: bold;
-                padding: 8px 18px;
-                border: none;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QPushButton:hover { background-color: #1D4ED8; }
-        """)
         save_btn.clicked.connect(self.save_changes)
         btns_row.addWidget(save_btn)
 
@@ -117,10 +60,7 @@ class EditProfileDialog(QDialog):
     def load_current_data(self):
         client = self.db.get_client_by_id(self.client_id)
         if client:
-            if client.full_name and client.full_name != "Покупець":
-                self.name_input.setText(client.full_name)
-            else:
-                self.name_input.setText(client.full_name or "")
+            self.name_input.setText(client.full_name or "")
             self.phone_input.setText(client.phone or "")
             self.email_input.setText(client.email or "")
 
@@ -173,48 +113,24 @@ class OrderDetailsDialog(QDialog):
         super().__init__(parent)
         self.order_data = order_data
         self.setWindowTitle(f"Деталі замовлення №{order_data['order_id']}")
-        self.resize(680, 500)
+        self.resize(660, 480)
         self.init_ui()
 
     def init_ui(self):
-        self.setStyleSheet("""
-            QDialog { background-color: #F1F5F9; }
-            QFrame#InfoCard {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 8px;
-            }
-        """)
-
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
 
-        # Заголовок та статус
         top_row = QHBoxLayout()
-        title = QLabel(f"Замовлення №{self.order_data['order_id']}")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #0F172A;")
-        top_row.addWidget(title)
+        top_row.addWidget(QLabel(f"<b>Замовлення №{self.order_data['order_id']}</b>"))
         top_row.addStretch()
-
         status = self.order_data.get("status", "Нове")
-        status_lbl = QLabel(f"Статус: {status}")
-        if status.strip().lower() == "доставлено":
-            status_style = "background-color: #DCFCE7; color: #166534; border: 1px solid #86EFAC;"
-        elif status.strip().lower() == "скасовано":
-            status_style = "background-color: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5;"
-        else:
-            status_style = "background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE;"
-        status_lbl.setStyleSheet(f"{status_style} border-radius: 6px; padding: 5px 12px; font-weight: bold; font-size: 12px;")
-        top_row.addWidget(status_lbl)
+        top_row.addWidget(QLabel(f"<b>Статус:</b> {status}"))
         layout.addLayout(top_row)
 
-        # Картка з інформацією про доставку та оплату
-        info_card = QFrame()
-        info_card.setObjectName("InfoCard")
-        info_layout = QVBoxLayout(info_card)
-        info_layout.setContentsMargins(14, 12, 14, 12)
-        info_layout.setSpacing(5)
+        info_box = QGroupBox("Дані замовлення")
+        info_layout = QVBoxLayout(info_box)
+        info_layout.setSpacing(4)
 
         info_layout.addWidget(QLabel(f"<b>Дата оформлення:</b> {self.order_data.get('order_date', '—')}"))
         info_layout.addWidget(QLabel(f"<b>Отримувач:</b> {self.order_data.get('client_name', '—')} ({self.order_data.get('phone', '—')})"))
@@ -224,9 +140,8 @@ class OrderDetailsDialog(QDialog):
         if self.order_data.get("comment"):
             info_layout.addWidget(QLabel(f"<b>Коментар:</b> {self.order_data['comment']}"))
 
-        layout.addWidget(info_card)
+        layout.addWidget(info_box)
 
-        # Таблиця товарів замовлення
         items_table = QTableWidget()
         items_table.setColumnCount(4)
         items_table.setHorizontalHeaderLabels(["Назва товару", "Кількість", "Ціна за од.", "Сума"])
@@ -251,11 +166,8 @@ class OrderDetailsDialog(QDialog):
 
         layout.addWidget(items_table)
 
-        # Підсумок оплати та бонусів
-        summary_card = QFrame()
-        summary_card.setObjectName("InfoCard")
-        sum_layout = QVBoxLayout(summary_card)
-        sum_layout.setContentsMargins(14, 10, 14, 10)
+        summary_box = QGroupBox("Підсумок оплати")
+        sum_layout = QVBoxLayout(summary_box)
         sum_layout.setSpacing(4)
 
         bonus_used = int(self.order_data.get("bonus_used", 0))
@@ -265,61 +177,28 @@ class OrderDetailsDialog(QDialog):
 
         sum_layout.addWidget(QLabel(f"Вартість товарів: <b>{subtotal:.2f} грн</b>"))
         if bonus_used > 0:
-            disc_lbl = QLabel(f"Використано бонусів (знижка): <b>-{bonus_used:.2f} грн</b> ({bonus_used} бонусів)")
-            disc_lbl.setStyleSheet("color: #2563EB;")
-            sum_layout.addWidget(disc_lbl)
+            sum_layout.addWidget(QLabel(f"Використано бонусів (знижка): <b>-{bonus_used:.2f} грн</b> ({bonus_used} бонусів)"))
 
-        total_lbl = QLabel(f"Загальна сума замовлення: <b>{total_amount:.2f} грн</b>")
-        total_lbl.setStyleSheet("font-size: 15px; color: #15803D;")
-        sum_layout.addWidget(total_lbl)
+        sum_layout.addWidget(QLabel(f"<b>Загальна сума замовлення: {total_amount:.2f} грн</b>"))
 
         expected_bonus = int(total_amount // 100)
         if status.strip().lower() == "доставлено" and bonus_awarded:
-            b_lbl = QLabel(f"🎁 Нараховано бонусів за замовлення: <b>+{bonus_earned} бонусів</b>")
-            b_lbl.setStyleSheet("color: #166534; font-size: 12px;")
-            sum_layout.addWidget(b_lbl)
+            sum_layout.addWidget(QLabel(f"Нараховано бонусів за замовлення: <b>+{bonus_earned} бонусів</b>"))
         elif status.strip().lower() != "скасовано" and expected_bonus > 0:
-            b_lbl = QLabel(f"ℹ️ Після отримання замовлення (статус «Доставлено») буде нараховано: <b>+{expected_bonus} бонусів</b>")
-            b_lbl.setStyleSheet("color: #475569; font-size: 12px;")
-            sum_layout.addWidget(b_lbl)
+            sum_layout.addWidget(QLabel(f"Після отримання замовлення (статус «Доставлено») буде нараховано: <b>+{expected_bonus} бонусів</b>"))
 
-        layout.addWidget(summary_card)
+        layout.addWidget(summary_box)
 
-        # Нижні кнопки
         btns_row = QHBoxLayout()
         receipt_path = self.order_data.get("receipt_path")
         if receipt_path and os.path.exists(receipt_path):
-            pdf_btn = QPushButton("📄 Відкрити PDF-чек")
-            pdf_btn.setCursor(Qt.PointingHandCursor)
-            pdf_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #2563EB;
-                    color: #FFFFFF;
-                    font-weight: bold;
-                    padding: 7px 14px;
-                    border: none;
-                    border-radius: 6px;
-                }
-                QPushButton:hover { background-color: #1D4ED8; }
-            """)
+            pdf_btn = QPushButton("Відкрити PDF-чек")
             pdf_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(receipt_path))))
             btns_row.addWidget(pdf_btn)
 
         btns_row.addStretch()
 
         close_btn = QPushButton("Закрити")
-        close_btn.setCursor(Qt.PointingHandCursor)
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #E2E8F0;
-                color: #1E293B;
-                font-weight: bold;
-                padding: 7px 18px;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover { background-color: #CBD5E1; }
-        """)
         close_btn.clicked.connect(self.accept)
         btns_row.addWidget(close_btn)
 
@@ -328,12 +207,11 @@ class OrderDetailsDialog(QDialog):
 
 class PersonalAccountWidget(QWidget):
     """
-    Головна сторінка особистого кабінету покупця:
+    Особистий кабінет покупця (базовий інтерфейс):
     1. Особисті дані покупця + редагування профілю
     2. Блок «Мої бонуси»
     3. Блок «Мої замовлення» з детальним переглядом
     """
-    back_to_store_requested = pyqtSignal()
     profile_updated = pyqtSignal()
 
     def __init__(self, db_manager, get_client_id_func, parent=None):
@@ -344,141 +222,47 @@ class PersonalAccountWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.setStyleSheet("""
-            QWidget#PersonalAccountRoot {
-                background-color: #F1F5F9;
-            }
-            QFrame#SectionCard {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 10px;
-            }
-            QLabel#CardTitle {
-                font-size: 16px;
-                font-weight: bold;
-                color: #0F172A;
-            }
-        """)
-        self.setObjectName("PersonalAccountRoot")
-
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(16, 12, 16, 12)
-        root_layout.setSpacing(12)
+        root_layout.setContentsMargins(12, 10, 12, 10)
+        root_layout.setSpacing(10)
 
-        # Верхня панель навігації особистого кабінету
-        nav_bar = QHBoxLayout()
-        self.back_btn = QPushButton("← Повернутися до магазину")
-        self.back_btn.setCursor(Qt.PointingHandCursor)
-        self.back_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 7px 14px;
-                font-weight: bold;
-                color: #1E293B;
-            }
-            QPushButton:hover { background-color: #E2E8F0; }
-        """)
-        self.back_btn.clicked.connect(self.back_to_store_requested.emit)
-        nav_bar.addWidget(self.back_btn)
+        top_bar = QHBoxLayout()
+        top_bar.addWidget(QLabel("<b>Особистий кабінет покупця</b>"))
+        top_bar.addStretch()
 
-        nav_bar.addSpacing(12)
-        page_title = QLabel("Особистий кабінет покупця")
-        page_title.setStyleSheet("font-size: 19px; font-weight: bold; color: #0F172A;")
-        nav_bar.addWidget(page_title)
-        nav_bar.addStretch()
-
-        self.refresh_btn = QPushButton("↻ Оновити")
-        self.refresh_btn.setCursor(Qt.PointingHandCursor)
-        self.refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FFFFFF;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 7px 12px;
-                color: #334155;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #E2E8F0; }
-        """)
+        self.refresh_btn = QPushButton("Оновити")
         self.refresh_btn.clicked.connect(self.refresh_data)
-        nav_bar.addWidget(self.refresh_btn)
+        top_bar.addWidget(self.refresh_btn)
+        root_layout.addLayout(top_bar)
 
-        root_layout.addLayout(nav_bar)
-
-        # Прокручувана область вмісту особистого кабінету
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("background-color: transparent;")
 
         scroll_content = QWidget()
-        scroll_content.setStyleSheet("background-color: transparent;")
         content_layout = QVBoxLayout(scroll_content)
         content_layout.setContentsMargins(0, 0, 6, 0)
-        content_layout.setSpacing(14)
+        content_layout.setSpacing(12)
 
-        # ==========================================
         # 1. БЛОК: ОСОБИСТІ ДАНІ ПОКУПЦЯ
-        # ==========================================
-        profile_card = QFrame()
-        profile_card.setObjectName("SectionCard")
-        profile_layout = QVBoxLayout(profile_card)
-        profile_layout.setContentsMargins(18, 16, 18, 16)
-        profile_layout.setSpacing(12)
+        profile_box = QGroupBox("Особисті дані покупця")
+        profile_layout = QVBoxLayout(profile_box)
+        profile_layout.setSpacing(8)
 
-        prof_header = QHBoxLayout()
-        prof_title = QLabel("👤 Особисті дані покупця")
-        prof_title.setObjectName("CardTitle")
-        prof_header.addWidget(prof_title)
-        prof_header.addStretch()
-
-        self.edit_profile_btn = QPushButton("✏️ Редагувати профіль")
-        self.edit_profile_btn.setCursor(Qt.PointingHandCursor)
-        self.edit_profile_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                font-weight: bold;
-                font-size: 13px;
-                padding: 7px 16px;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover { background-color: #1D4ED8; }
-        """)
-        self.edit_profile_btn.clicked.connect(self.open_edit_profile)
-        prof_header.addWidget(self.edit_profile_btn)
-        profile_layout.addLayout(prof_header)
-
-        # Сітка полів профілю
         fields_grid = QGridLayout()
         fields_grid.setHorizontalSpacing(24)
-        fields_grid.setVerticalSpacing(6)
+        fields_grid.setVerticalSpacing(4)
 
-        lbl_name_cap = QLabel("Ім’я та прізвище")
-        lbl_name_cap.setStyleSheet("font-size: 12px; color: #64748B; font-weight: bold;")
-        self.name_val_label = QLabel("—")
-        self.name_val_label.setStyleSheet("font-size: 15px; color: #0F172A; font-weight: bold;")
-
-        lbl_phone_cap = QLabel("Номер телефону")
-        lbl_phone_cap.setStyleSheet("font-size: 12px; color: #64748B; font-weight: bold;")
-        self.phone_val_label = QLabel("Не вказано")
-        self.phone_val_label.setStyleSheet("font-size: 15px; color: #0F172A;")
-
-        lbl_email_cap = QLabel("Електронна пошта")
-        lbl_email_cap.setStyleSheet("font-size: 12px; color: #64748B; font-weight: bold;")
-        self.email_val_label = QLabel("Не вказано")
-        self.email_val_label.setStyleSheet("font-size: 15px; color: #0F172A;")
-
-        fields_grid.addWidget(lbl_name_cap, 0, 0)
+        fields_grid.addWidget(QLabel("Ім’я та прізвище:"), 0, 0)
+        self.name_val_label = QLabel("<b>—</b>")
         fields_grid.addWidget(self.name_val_label, 1, 0)
 
-        fields_grid.addWidget(lbl_phone_cap, 0, 1)
+        fields_grid.addWidget(QLabel("Номер телефону:"), 0, 1)
+        self.phone_val_label = QLabel("Не вказано")
         fields_grid.addWidget(self.phone_val_label, 1, 1)
 
-        fields_grid.addWidget(lbl_email_cap, 0, 2)
+        fields_grid.addWidget(QLabel("Електронна пошта:"), 0, 2)
+        self.email_val_label = QLabel("Не вказано")
         fields_grid.addWidget(self.email_val_label, 1, 2)
 
         fields_grid.setColumnStretch(0, 2)
@@ -486,94 +270,43 @@ class PersonalAccountWidget(QWidget):
         fields_grid.setColumnStretch(2, 2)
 
         profile_layout.addLayout(fields_grid)
-        content_layout.addWidget(profile_card)
 
-        # ==========================================
-        # 2. БЛОК: МОЇ БОНУСИ (НА ГОЛОВНІЙ СТОРІНЦІ КАБІНЕТУ)
-        # ==========================================
-        bonus_card = QFrame()
-        bonus_card.setObjectName("SectionCard")
-        bonus_layout = QVBoxLayout(bonus_card)
-        bonus_layout.setContentsMargins(18, 16, 18, 16)
-        bonus_layout.setSpacing(12)
+        prof_btn_row = QHBoxLayout()
+        self.edit_profile_btn = QPushButton("Редагувати профіль")
+        self.edit_profile_btn.clicked.connect(self.open_edit_profile)
+        prof_btn_row.addWidget(self.edit_profile_btn)
+        prof_btn_row.addStretch()
+        profile_layout.addLayout(prof_btn_row)
 
-        bonus_header = QHBoxLayout()
-        bonus_title = QLabel("🎁 Мої бонуси")
-        bonus_title.setObjectName("CardTitle")
-        bonus_header.addWidget(bonus_title)
-        bonus_header.addStretch()
+        content_layout.addWidget(profile_box)
 
-        bonus_rule_badge = QLabel("1 бонус = 1 грн знижки  •  +1 бонус за кожні 100 грн доставленого замовлення")
-        bonus_rule_badge.setStyleSheet("""
-            background-color: #FEF9C3;
-            color: #854D0E;
-            border: 1px solid #FDE047;
-            border-radius: 6px;
-            padding: 4px 10px;
-            font-size: 12px;
-            font-weight: bold;
-        """)
-        bonus_header.addWidget(bonus_rule_badge)
-        bonus_layout.addLayout(bonus_header)
+        # 2. БЛОК: МОЇ БОНУСИ
+        bonus_box = QGroupBox("Мої бонуси")
+        bonus_layout = QVBoxLayout(bonus_box)
+        bonus_layout.setSpacing(8)
 
-        # 4 картки показників бонусного балансу
+        bonus_layout.addWidget(QLabel("Правила програми: 1 бонус = 1 грн знижки (+1 бонус за кожні 100 грн доставленого замовлення)"))
+
         metrics_row = QHBoxLayout()
-        metrics_row.setSpacing(12)
+        metrics_row.setSpacing(10)
 
-        self.current_bonus_val = self._create_metric_box(
-            metrics_row,
-            caption="Поточний баланс бонусів",
-            initial_value="0 бонусів",
-            bg_color="#EFF6FF",
-            border_color="#BFDBFE",
-            val_color="#1D4ED8"
-        )
-        self.uah_equiv_val = self._create_metric_box(
-            metrics_row,
-            caption="Грошовий еквівалент знижки",
-            initial_value="0.00 грн",
-            bg_color="#F0FDF4",
-            border_color="#BBF7D0",
-            val_color="#15803D"
-        )
-        self.total_earned_val = self._create_metric_box(
-            metrics_row,
-            caption="Накопичено всього бонусів",
-            initial_value="0 бонусів",
-            bg_color="#F8FAFC",
-            border_color="#E2E8F0",
-            val_color="#0F172A"
-        )
-        self.total_spent_val = self._create_metric_box(
-            metrics_row,
-            caption="Використано бонусів",
-            initial_value="0 бонусів",
-            bg_color="#F8FAFC",
-            border_color="#E2E8F0",
-            val_color="#475569"
-        )
+        self.current_bonus_val = self._create_metric_box(metrics_row, "Поточний баланс бонусів", "0 бонусів")
+        self.uah_equiv_val = self._create_metric_box(metrics_row, "Грошовий еквівалент", "0.00 грн")
+        self.total_earned_val = self._create_metric_box(metrics_row, "Накопичено всього", "0 бонусів")
+        self.total_spent_val = self._create_metric_box(metrics_row, "Використано бонусів", "0 бонусів")
 
         bonus_layout.addLayout(metrics_row)
-        content_layout.addWidget(bonus_card)
+        content_layout.addWidget(bonus_box)
 
-        # ==========================================
-        # 3. БЛОК: МОЇ ЗАМОВЛЕННЯ (ІСТОРІЯ ЗАМОВЛЕНЬ)
-        # ==========================================
-        orders_card = QFrame()
-        orders_card.setObjectName("SectionCard")
-        orders_layout = QVBoxLayout(orders_card)
-        orders_layout.setContentsMargins(18, 16, 18, 16)
-        orders_layout.setSpacing(10)
+        # 3. БЛОК: МОЇ ЗАМОВЛЕННЯ
+        orders_box = QGroupBox("Мої замовлення")
+        orders_layout = QVBoxLayout(orders_box)
+        orders_layout.setSpacing(8)
 
         orders_header = QHBoxLayout()
-        orders_title = QLabel("📦 Мої замовлення")
-        orders_title.setObjectName("CardTitle")
-        orders_header.addWidget(orders_title)
-        orders_header.addStretch()
-
         self.orders_count_label = QLabel("Всього замовлень: 0")
-        self.orders_count_label.setStyleSheet("color: #475569; font-weight: bold; font-size: 13px;")
         orders_header.addWidget(self.orders_count_label)
+        orders_header.addStretch()
         orders_layout.addLayout(orders_header)
 
         self.orders_table = QTableWidget()
@@ -589,71 +322,52 @@ class PersonalAccountWidget(QWidget):
         self.orders_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.orders_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.orders_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Fixed)
-        self.orders_table.setColumnWidth(6, 125)
+        self.orders_table.setColumnWidth(6, 120)
         self.orders_table.verticalHeader().setVisible(False)
-        self.orders_table.verticalHeader().setDefaultSectionSize(42)
+        self.orders_table.verticalHeader().setDefaultSectionSize(38)
         self.orders_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.orders_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.orders_table.setMinimumHeight(260)
+        self.orders_table.setMinimumHeight(250)
         self.orders_table.cellDoubleClicked.connect(self.on_order_double_clicked)
 
         orders_layout.addWidget(self.orders_table)
-        content_layout.addWidget(orders_card)
+        content_layout.addWidget(orders_box)
 
         scroll.setWidget(scroll_content)
         root_layout.addWidget(scroll)
 
-    def _create_metric_box(self, parent_layout, caption: str, initial_value: str,
-                           bg_color: str, border_color: str, val_color: str) -> QLabel:
+    def _create_metric_box(self, parent_layout, caption: str, initial_value: str) -> QLabel:
         box = QFrame()
-        box.setStyleSheet(f"""
-            QFrame {{
-                background-color: {bg_color};
-                border: 1px solid {border_color};
-                border-radius: 8px;
-            }}
-            QLabel {{
-                border: none;
-                background: transparent;
-            }}
-        """)
+        box.setFrameShape(QFrame.StyledPanel)
         box_layout = QVBoxLayout(box)
-        box_layout.setContentsMargins(14, 12, 14, 12)
+        box_layout.setContentsMargins(10, 8, 10, 8)
         box_layout.setSpacing(4)
 
-        cap_lbl = QLabel(caption)
-        cap_lbl.setStyleSheet("font-size: 12px; color: #475569; font-weight: bold;")
-        val_lbl = QLabel(initial_value)
-        val_lbl.setStyleSheet(f"font-size: 18px; color: {val_color}; font-weight: bold;")
-
-        box_layout.addWidget(cap_lbl)
+        box_layout.addWidget(QLabel(caption))
+        val_lbl = QLabel(f"<b>{initial_value}</b>")
         box_layout.addWidget(val_lbl)
         parent_layout.addWidget(box, stretch=1)
         return val_lbl
 
     def refresh_data(self):
-        """Завантаження актуальних даних профілю, бонусів та замовлень поточного покупця"""
         client_id = self.get_client_id()
         client = self.db.ensure_client_profile(client_id)
 
-        # 1. Особисті дані
-        self.name_val_label.setText(client.full_name or "Покупець")
+        self.name_val_label.setText(f"<b>{client.full_name or 'Покупець'}</b>")
         self.phone_val_label.setText(client.phone if client.phone else "Не вказано")
         self.email_val_label.setText(client.email if client.email else "Не вказано")
 
-        # 2. Бонусний баланс (із автоматичною синхронізацією доставлених замовлень)
         bonus_info = self.db.get_client_bonus_info(client_id)
         cur_bal = bonus_info["current_balance"]
         uah_eq = bonus_info["uah_equivalent"]
         earned = bonus_info["total_earned"]
         spent = bonus_info["total_spent"]
 
-        self.current_bonus_val.setText(f"{cur_bal} бонусів")
-        self.uah_equiv_val.setText(f"{uah_eq:.2f} грн")
-        self.total_earned_val.setText(f"{earned} бонусів")
-        self.total_spent_val.setText(f"{spent} бонусів")
+        self.current_bonus_val.setText(f"<b>{cur_bal} бонусів</b>")
+        self.uah_equiv_val.setText(f"<b>{uah_eq:.2f} грн</b>")
+        self.total_earned_val.setText(f"<b>{earned} бонусів</b>")
+        self.total_spent_val.setText(f"<b>{spent} бонусів</b>")
 
-        # 3. Історія замовлень поточного покупця
         self.orders_cache = self.db.get_client_orders_detailed(client_id)
         self.orders_count_label.setText(f"Всього замовлень: {len(self.orders_cache)}")
         self.populate_orders_table()
@@ -675,14 +389,7 @@ class PersonalAccountWidget(QWidget):
             items_item.setToolTip(items_summary)
             qty_item = QTableWidgetItem(f"{total_qty} шт.")
             sum_item = QTableWidgetItem(f"{total_amount:.2f} грн")
-
             status_item = QTableWidgetItem(status)
-            if status.strip().lower() == "доставлено":
-                status_item.setForeground(QColor("#15803D"))
-            elif status.strip().lower() == "скасовано":
-                status_item.setForeground(QColor("#DC2626"))
-            else:
-                status_item.setForeground(QColor("#1D4ED8"))
 
             self.orders_table.setItem(row, 0, id_item)
             self.orders_table.setItem(row, 1, date_item)
@@ -693,26 +400,9 @@ class PersonalAccountWidget(QWidget):
 
             btn_container = QWidget()
             btn_layout = QHBoxLayout(btn_container)
-            btn_layout.setContentsMargins(6, 4, 6, 4)
+            btn_layout.setContentsMargins(4, 2, 4, 2)
 
             details_btn = QPushButton("Детальніше")
-            details_btn.setCursor(Qt.PointingHandCursor)
-            details_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #F1F5F9;
-                    border: 1px solid #CBD5E1;
-                    border-radius: 5px;
-                    padding: 4px 10px;
-                    font-weight: bold;
-                    font-size: 12px;
-                    color: #0F172A;
-                }
-                QPushButton:hover {
-                    background-color: #2563EB;
-                    color: #FFFFFF;
-                    border-color: #2563EB;
-                }
-            """)
             details_btn.clicked.connect(lambda checked, oid=order_id: self.open_order_details(oid))
             btn_layout.addWidget(details_btn)
 

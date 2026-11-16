@@ -1,13 +1,13 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QTableWidget, QTableWidgetItem, QPushButton,
-    QHeaderView, QMessageBox
+    QHeaderView
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
 
 class FavoritesTab(QWidget):
-    """Вкладка «Обране» в особистому кабінеті покупця"""
+    """Вкладка «Обране» в базовому вигляді"""
     open_product_requested = pyqtSignal(int)
     favorite_removed = pyqtSignal(int)
 
@@ -19,17 +19,14 @@ class FavoritesTab(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(10)
 
         header_row = QHBoxLayout()
-        title_label = QLabel("<b>❤️ Мої обрані товари</b>")
-        title_label.setStyleSheet("font-size: 16px; color: #0F172A;")
-        header_row.addWidget(title_label)
+        header_row.addWidget(QLabel("<b>Обрані товари</b>"))
         header_row.addStretch()
 
         self.count_label = QLabel("Товарів у списку: 0")
-        self.count_label.setStyleSheet("color: #475569; font-weight: bold;")
         header_row.addWidget(self.count_label)
         layout.addLayout(header_row)
 
@@ -43,8 +40,8 @@ class FavoritesTab(QWidget):
         self.favorites_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.favorites_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.favorites_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
-        self.favorites_table.setColumnWidth(4, 270)
-        self.favorites_table.verticalHeader().setDefaultSectionSize(42)
+        self.favorites_table.setColumnWidth(4, 240)
+        self.favorites_table.verticalHeader().setDefaultSectionSize(38)
         self.favorites_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.favorites_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.favorites_table.cellDoubleClicked.connect(self.on_row_double_clicked)
@@ -53,7 +50,6 @@ class FavoritesTab(QWidget):
         self.load_favorites()
 
     def load_favorites(self):
-        """Завантаження списку обраного поточного користувача з SQLite"""
         client_id = self.get_client_id()
         products = self.db.get_favorite_products(client_id)
         self.count_label.setText(f"Товарів у списку: {len(products)}")
@@ -67,52 +63,27 @@ class FavoritesTab(QWidget):
             price_item = QTableWidgetItem(f"{prod.price:.2f} грн")
 
             if prod.stock_quantity > 0:
-                stock_text = f"В наявності ({prod.stock_quantity} шт.)"
-                stock_item = QTableWidgetItem(stock_text)
-                stock_item.setForeground(Qt.darkGreen)
+                stock_item = QTableWidgetItem(f"В наявності ({prod.stock_quantity} шт.)")
             else:
                 stock_item = QTableWidgetItem("Немає в наявності")
-                stock_item.setForeground(Qt.red)
 
             self.favorites_table.setItem(row, 0, title_item)
             self.favorites_table.setItem(row, 1, brand_item)
             self.favorites_table.setItem(row, 2, price_item)
             self.favorites_table.setItem(row, 3, stock_item)
 
-            # Кнопки дій у рядку: перехід на сторінку товару та видалення з обраного
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 3, 4, 3)
+            actions_layout.setContentsMargins(4, 2, 4, 2)
             actions_layout.setSpacing(6)
 
             open_btn = QPushButton("Детальніше")
             open_btn.setCursor(Qt.PointingHandCursor)
-            open_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #2563EB;
-                    color: #FFFFFF;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 4px 10px;
-                    font-weight: bold;
-                }
-                QPushButton:hover { background-color: #1D4ED8; }
-            """)
             open_btn.clicked.connect(lambda checked, pid=prod.product_id: self.open_product_requested.emit(pid))
             actions_layout.addWidget(open_btn)
 
-            remove_btn = QPushButton("💔 Видалити")
+            remove_btn = QPushButton("Видалити")
             remove_btn.setCursor(Qt.PointingHandCursor)
-            remove_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #FEF2F2;
-                    color: #DC2626;
-                    border: 1px solid #FECACA;
-                    border-radius: 4px;
-                    padding: 4px 10px;
-                }
-                QPushButton:hover { background-color: #FEE2E2; }
-            """)
             remove_btn.clicked.connect(lambda checked, pid=prod.product_id: self.remove_favorite(pid))
             actions_layout.addWidget(remove_btn)
 

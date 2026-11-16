@@ -9,7 +9,7 @@ from receipt_generator import generate_pdf_receipt
 
 
 class CartDialog(QDialog):
-    """Вікно кошика покупок"""
+    """Окреме вікно кошика покупок"""
     def __init__(self, cart, db_manager, parent=None):
         super().__init__(parent)
         self.cart = cart
@@ -112,21 +112,26 @@ class CartDialog(QDialog):
             QMessageBox.warning(self, "Помилка", "Кошик порожній.")
             return
 
-        from catalog_tab import OrderDialog
+        from catalog_tab import OrderDialog, OrderSuccessDialog
 
-        dialog = OrderDialog(self)
+        dialog = OrderDialog(cart_items=self.cart, parent=self)
         if dialog.exec_() == QDialog.Accepted:
             client = dialog.get_client_data()
-            if not client.full_name or not client.phone or not client.address:
-                QMessageBox.warning(self, "Помилка", "Заповніть обов'язкові поля (ПІБ, Телефон, Адреса).")
-                return
+            details = dialog.get_order_details()
 
             order_items = [
                 OrderItem(product_id=prod.product_id, quantity=qty, price_per_unit=prod.price)
                 for prod, qty in self.cart
             ]
 
-            order_id, client_id = self.db.create_order(client, order_items)
+            order_id, client_id = self.db.create_order(
+                client=client,
+                items=order_items,
+                delivery_method=details["delivery_method"],
+                delivery_address=details["delivery_address"],
+                payment_method=details["payment_method"],
+                comment=details["comment"]
+            )
             order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             receipt_items = [
@@ -142,7 +147,11 @@ class CartDialog(QDialog):
                 order_date=order_date,
                 status="Нове",
                 total_amount=total_amount,
-                items=receipt_items
+                items=receipt_items,
+                delivery_method=details["delivery_method"],
+                delivery_address=details["delivery_address"],
+                payment_method=details["payment_method"],
+                comment=details["comment"]
             )
 
             self.db.update_order_receipt_path(order_id, pdf_path)
@@ -154,15 +163,24 @@ class CartDialog(QDialog):
             if parent_widget and hasattr(parent_widget, 'set_client_id'):
                 parent_widget.set_client_id(client_id)
 
-            QMessageBox.information(
-                self, "Успіх", 
-                f"Замовлення №{order_id} успішно створено!\nЧек збережено: {pdf_path}"
+            # Екран успішного оформлення замовлення
+            success_dialog = OrderSuccessDialog(
+                order_id=order_id,
+                client_name=client.full_name,
+                delivery_address=details["delivery_address"],
+                payment_method=details["payment_method"],
+                total_amount=total_amount,
+                pdf_path=pdf_path,
+                parent=self
             )
+            success_dialog.exec_()
+
             self.cart.clear()
             self.refresh_cart_table()
             
             if self.parent() and hasattr(self.parent(), 'load_products'):
                 self.parent().load_products()
+            if self.parent() and hasattr(self.parent(), 'update_cart_btn_text'):
                 self.parent().update_cart_btn_text()
             
             self.accept()

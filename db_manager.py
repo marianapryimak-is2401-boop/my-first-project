@@ -10,6 +10,7 @@ class DatabaseManager:
         self.db_name = db_name
         self._init_supplier_tables()
         self._init_receipt_tables()
+        self._init_order_details_columns()
         self._init_favorites_table()
 
     def _get_connection(self):
@@ -50,6 +51,23 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE orders ADD COLUMN receipt_path TEXT")
             conn.commit()
 
+    def _init_order_details_columns(self):
+        """Безпечне додавання полів доставки, оплати та коментаря у таблицю orders"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(orders)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if 'delivery_method' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN delivery_method TEXT DEFAULT 'Нова пошта'")
+            if 'delivery_address' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN delivery_address TEXT")
+            if 'payment_method' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT 'Оплата карткою'")
+            if 'comment' not in columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN comment TEXT")
+            conn.commit()
+
     def _init_favorites_table(self):
         """Створення таблиці обраних товарів для збереження в SQLite"""
         with self._get_connection() as conn:
@@ -76,7 +94,6 @@ class DatabaseManager:
             return [Category(category_id=row[0], name=row[1], description=row[2]) for row in rows]
 
     def get_category_name_by_id(self, category_id: int) -> str:
-        """Отримання назви категорії за її ID"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM categories WHERE category_id = ?", (category_id,))
@@ -86,7 +103,6 @@ class DatabaseManager:
     # --- ОПЕРАЦІЇ З ОБРАНИМ (FAVORITES) ---
 
     def add_to_favorites(self, client_id: int, product_id: int):
-        """Додавання товару до списку обраного користувача"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -96,7 +112,6 @@ class DatabaseManager:
             conn.commit()
 
     def remove_from_favorites(self, client_id: int, product_id: int):
-        """Видалення товару зі списку обраного користувача"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -106,7 +121,6 @@ class DatabaseManager:
             conn.commit()
 
     def is_favorite(self, client_id: int, product_id: int) -> bool:
-        """Перевірка, чи знаходиться товар в обраному користувача"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -116,7 +130,6 @@ class DatabaseManager:
             return cursor.fetchone() is not None
 
     def toggle_favorite(self, client_id: int, product_id: int) -> bool:
-        """Перемикання стану обраного: повертає True, якщо додано, і False, якщо видалено"""
         if self.is_favorite(client_id, product_id):
             self.remove_from_favorites(client_id, product_id)
             return False
@@ -125,14 +138,12 @@ class DatabaseManager:
             return True
 
     def get_favorite_product_ids(self, client_id: int) -> Set[int]:
-        """Отримання множини ID всіх обраних товарів користувача"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT product_id FROM favorites WHERE client_id = ?", (client_id,))
             return {row[0] for row in cursor.fetchall()}
 
     def get_favorite_products(self, client_id: int) -> List[Product]:
-        """Отримання повного списку обраних товарів конкретного користувача"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -331,23 +342,36 @@ class DatabaseManager:
 
     # --- ОПЕРАЦІЇ З ЗАМОВЛЕННЯМИ ---
 
-    def create_order(self, client: Client, items: List[OrderItem]) -> Tuple[int, int]:
-        """Створення клієнта та замовлення. Повертає кортеж (order_id, client_id)"""
+    def create_order(
+        self,
+        client: Client,
+        items: List[OrderItem],
+        delivery_method: str = "Нова пошта",
+        delivery_address: str = "",
+        payment_method: str = "Оплата карткою",
+        comment: str = ""
+    ) -> Tuple[int, int]:
+        """Створення клієнта, замовлення з деталями доставки/оплати та оновлення залишків товарів"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+
+            final_address = delivery_address or client.address
             
             cursor.execute("""
                 INSERT INTO clients (full_name, phone, email, address)
                 VALUES (?, ?, ?, ?)
-            """, (client.full_name, client.phone, client.email, client.address))
+            """, (client.full_name, client.phone, client.email, final_address))
             client_id = cursor.lastrowid
 
             total_amount = sum(item.quantity * item.price_per_unit for item in items)
 
             cursor.execute("""
-                INSERT INTO orders (client_id, total_amount, status)
-                VALUES (?, ?, 'Нове')
-            """, (client_id, total_amount))
+                INSERT INTO orders (
+                    client_id, total_amount, status,
+                    delivery_method, delivery_address, payment_method, comment
+                )
+                VALUES (?, ?, 'Нове', ?, ?, ?, ?)
+            """, (client_id, total_amount, delivery_method, final_address, payment_method, comment))
             order_id = cursor.lastrowid
 
             for item in items:
@@ -401,7 +425,9 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT o.order_id, c.full_name, c.phone, o.order_date, o.status, o.total_amount, o.receipt_path, o.client_id
+                SELECT o.order_id, c.full_name, c.phone, o.order_date, o.status,
+                       o.total_amount, o.receipt_path, o.client_id,
+                       o.delivery_method, o.delivery_address, o.payment_method, o.comment
                 FROM orders o
                 JOIN clients c ON o.client_id = c.client_id
                 WHERE o.order_id = ?
@@ -427,6 +453,10 @@ class DatabaseManager:
                 "total_amount": order_row[5],
                 "receipt_path": order_row[6],
                 "client_id": order_row[7],
+                "delivery_method": order_row[8] or "Нова пошта",
+                "delivery_address": order_row[9] or "",
+                "payment_method": order_row[10] or "Оплата карткою",
+                "comment": order_row[11] or "",
                 "items": [
                     {"title": r[0], "quantity": r[1], "price_per_unit": r[2]}
                     for r in items_rows

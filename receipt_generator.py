@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -27,11 +26,22 @@ def register_cyrillic_font():
     return "Helvetica"
 
 
-def generate_pdf_receipt(order_id: int, client_name: str, phone: str, order_date: str, 
-                         status: str, total_amount: float, items: list) -> str:
+def generate_pdf_receipt(
+    order_id: int,
+    client_name: str,
+    phone: str,
+    order_date: str,
+    status: str,
+    total_amount: float,
+    items: list,
+    delivery_method: str = "Нова пошта",
+    delivery_address: str = "",
+    payment_method: str = "Оплата карткою",
+    comment: str = ""
+) -> str:
     """
     Генерація та постійне збереження PDF-чека у папку receipts/
-    Повертає відносний шлях до створиного файлу.
+    Повертає відносний шлях до створеного файлу.
     """
     receipts_dir = "receipts"
     os.makedirs(receipts_dir, exist_ok=True)
@@ -91,6 +101,8 @@ def generate_pdf_receipt(order_id: int, client_name: str, phone: str, order_date
     story.append(Paragraph("Товарний чек замовлення", header_style))
     story.append(Spacer(1, 10))
 
+    delivery_text = delivery_address if delivery_address else delivery_method
+
     info_data = [
         [
             Paragraph(f"<b>Номер замовлення:</b> №{order_id}", normal_style),
@@ -101,8 +113,12 @@ def generate_pdf_receipt(order_id: int, client_name: str, phone: str, order_date
             Paragraph(f"<b>Телефон:</b> {phone}", normal_style)
         ],
         [
+            Paragraph(f"<b>Доставка:</b> {delivery_text}", normal_style),
+            Paragraph(f"<b>Спосіб оплати:</b> {payment_method}", normal_style)
+        ],
+        [
             Paragraph(f"<b>Статус замовлення:</b> {status}", normal_style),
-            Paragraph("<b>Оплата:</b> Готівка / Карта при отриманні", normal_style)
+            Paragraph(f"<b>Коментар:</b> {comment or 'Без коментаря'}", normal_style)
         ]
     ]
 

@@ -1,12 +1,16 @@
+import os
+import re
 import sqlite3
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
     QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, 
     QMessageBox, QDialog, QFormLayout, QLineEdit, QSpinBox, 
-    QDoubleSpinBox, QTextEdit
+    QDoubleSpinBox, QTextEdit, QFrame, QStackedWidget
 )
+from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtGui import QDesktopServices
 from classes import Product, Client, OrderItem
-from cart import CartDialog  # Імпорт класу вікна кошика з файла cart.py
+from cart import CartDialog
 
 
 class ProductDialog(QDialog):
@@ -16,7 +20,7 @@ class ProductDialog(QDialog):
         self.db = db_manager
         self.product = product
         self.setWindowTitle("Редагування товару" if product else "Додавання товару")
-        self.resize(400, 350)
+        self.resize(400, 380)
 
         layout = QFormLayout(self)
 
@@ -24,6 +28,12 @@ class ProductDialog(QDialog):
         categories = self.db.get_all_categories()
         for cat in categories:
             self.category_combo.addItem(cat.name, cat.category_id)
+
+        self.supplier_combo = QComboBox()
+        self.supplier_combo.addItem("Без постачальника", None)
+        if hasattr(self.db, "get_all_suppliers"):
+            for sup in self.db.get_all_suppliers():
+                self.supplier_combo.addItem(sup.name, sup.supplier_id)
 
         self.title_input = QLineEdit()
         self.brand_input = QLineEdit()
@@ -39,6 +49,7 @@ class ProductDialog(QDialog):
         self.description_input = QTextEdit()
 
         layout.addRow("Категорія:", self.category_combo)
+        layout.addRow("Постачальник:", self.supplier_combo)
         layout.addRow("Назва:", self.title_input)
         layout.addRow("Бренд:", self.brand_input)
         layout.addRow("Ціна:", self.price_spin)
@@ -53,21 +64,15 @@ class ProductDialog(QDialog):
             idx = self.category_combo.findData(self.product.category_id)
             if idx >= 0:
                 self.category_combo.setCurrentIndex(idx)
+            if getattr(self.product, "supplier_id", None) is not None:
+                s_idx = self.supplier_combo.findData(self.product.supplier_id)
+                if s_idx >= 0:
+                    self.supplier_combo.setCurrentIndex(s_idx)
             self.title_input.setText(self.product.title)
             self.brand_input.setText(self.product.brand)
             self.price_spin.setValue(self.product.price)
             self.stock_spin.setValue(self.product.stock_quantity)
             self.description_input.setPlainText(self.product.description)
-            
-            # Вибір постачальника (у ProductDialog)
-        self.supplier_combo = QComboBox()
-        self.supplier_combo.addItem("Без постачальника", None)
-        suppliers = self.db.get_all_suppliers()
-        for s in suppliers:
-            self.supplier_combo.addItem(s.name, s.supplier_id)
-        
-        layout.addRow("Постачальник:", self.supplier_combo)
-        
 
     def save(self):
         if not self.title_input.text().strip():
@@ -77,6 +82,7 @@ class ProductDialog(QDialog):
 
     def get_product_data(self) -> Product:
         category_id = self.category_combo.currentData()
+        supplier_id = self.supplier_combo.currentData()
         title = self.title_input.text().strip()
         brand = self.brand_input.text().strip()
         price = self.price_spin.value()
@@ -86,6 +92,7 @@ class ProductDialog(QDialog):
         prod_id = self.product.product_id if self.product else None
         return Product(
             category_id=category_id,
+            supplier_id=supplier_id,
             title=title,
             brand=brand,
             price=price,
@@ -93,41 +100,567 @@ class ProductDialog(QDialog):
             description=description,
             product_id=prod_id
         )
-        
-  
-        
 
 
 class OrderDialog(QDialog):
-    """Діалогове вікно для введення даних клієнта"""
-    def __init__(self, parent=None):
+    """Сучасна сторінка оформлення замовлення з валідацією та підсумком"""
+    PICKUP_ADDRESS = "м. Київ, вул. Хрещатик, 22 (Пункт самовивозу магазину)"
+
+    def __init__(self, cart_items=None, parent=None):
         super().__init__(parent)
+        self.cart_items = cart_items or []
         self.setWindowTitle("Оформлення замовлення")
-        self.resize(350, 200)
+        self.resize(860, 620)
+        self.init_ui()
 
-        layout = QFormLayout(self)
+    def init_ui(self):
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #F1F5F9;
+            }
+            QFrame#CardPanel {
+                background-color: #FFFFFF;
+                border: 1px solid #CBD5E1;
+                border-radius: 10px;
+            }
+            QLabel#SectionTitle {
+                font-size: 14px;
+                font-weight: bold;
+                color: #0F172A;
+            }
+            QLabel#FieldLabel {
+                font-size: 12px;
+                font-weight: bold;
+                color: #334155;
+            }
+            QLineEdit, QComboBox, QTextEdit {
+                background-color: #FFFFFF;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 7px 10px;
+                font-size: 13px;
+                color: #0F172A;
+            }
+            QLineEdit:focus, QComboBox:focus, QTextEdit:focus {
+                border: 1px solid #2563EB;
+            }
+        """)
 
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(16, 14, 16, 14)
+        root_layout.setSpacing(12)
+
+        # Заголовок сторінки
+        header_lbl = QLabel("Оформлення замовлення")
+        header_lbl.setStyleSheet("font-size: 19px; font-weight: bold; color: #0F172A;")
+        root_layout.addWidget(header_lbl)
+
+        # Основний двоколонковий контейнер
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(14)
+
+        # ==========================================
+        # ЛІВА КОЛОНКА: ДАНІ ПОКУПЦЯ, ДОСТАВКА, ОПЛАТА
+        # ==========================================
+        left_panel = QFrame()
+        left_panel.setObjectName("CardPanel")
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(16, 14, 16, 14)
+        left_layout.setSpacing(10)
+
+        # 1. Контактні дані покупця
+        buyer_title = QLabel("1. Контактні дані покупця")
+        buyer_title.setObjectName("SectionTitle")
+        left_layout.addWidget(buyer_title)
+
+        lbl_name = QLabel("ПІБ покупця *")
+        lbl_name.setObjectName("FieldLabel")
         self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Наприклад: Шевченко Тарас Григорович")
+        left_layout.addWidget(lbl_name)
+        left_layout.addWidget(self.name_input)
+
+        contact_row = QHBoxLayout()
+        contact_row.setSpacing(10)
+
+        phone_col = QVBoxLayout()
+        lbl_phone = QLabel("Номер телефону *")
+        lbl_phone.setObjectName("FieldLabel")
         self.phone_input = QLineEdit()
+        self.phone_input.setPlaceholderText("+380 (67) 123-45-67")
+        phone_col.addWidget(lbl_phone)
+        phone_col.addWidget(self.phone_input)
+
+        email_col = QVBoxLayout()
+        lbl_email = QLabel("Електронна пошта *")
+        lbl_email.setObjectName("FieldLabel")
         self.email_input = QLineEdit()
-        self.address_input = QLineEdit()
+        self.email_input.setPlaceholderText("client@example.com")
+        email_col.addWidget(lbl_email)
+        email_col.addWidget(self.email_input)
 
-        layout.addRow("ПІБ:", self.name_input)
-        layout.addRow("Телефон:", self.phone_input)
-        layout.addRow("Email:", self.email_input)
-        layout.addRow("Адреса доставки:", self.address_input)
+        contact_row.addLayout(phone_col)
+        contact_row.addLayout(email_col)
+        left_layout.addLayout(contact_row)
 
-        self.submit_btn = QPushButton("Підтвердити замовлення")
-        self.submit_btn.clicked.connect(self.accept)
-        layout.addRow(self.submit_btn)
+        # 2. Спосіб доставки та динамічні поля адреси
+        delivery_title = QLabel("2. Спосіб та адреса доставки")
+        delivery_title.setObjectName("SectionTitle")
+        delivery_title.setStyleSheet("margin-top: 6px;")
+        left_layout.addWidget(delivery_title)
+
+        lbl_delivery = QLabel("Оберіть службу доставки *")
+        lbl_delivery.setObjectName("FieldLabel")
+        self.delivery_combo = QComboBox()
+        self.delivery_combo.addItems(["Нова пошта", "Укрпошта", "Самовивіз"])
+        self.delivery_combo.currentIndexChanged.connect(self.on_delivery_method_changed)
+        left_layout.addWidget(lbl_delivery)
+        left_layout.addWidget(self.delivery_combo)
+
+        # Динамічний стек полів адреси
+        self.address_stack = QStackedWidget()
+
+        # Сторінка 0: Нова пошта
+        np_page = QWidget()
+        np_layout = QHBoxLayout(np_page)
+        np_layout.setContentsMargins(0, 4, 0, 0)
+        np_layout.setSpacing(10)
+
+        np_city_col = QVBoxLayout()
+        np_city_lbl = QLabel("Місто *")
+        np_city_lbl.setObjectName("FieldLabel")
+        self.np_city_input = QLineEdit()
+        self.np_city_input.setPlaceholderText("Введіть місто (напр. Київ)")
+        np_city_col.addWidget(np_city_lbl)
+        np_city_col.addWidget(self.np_city_input)
+
+        np_branch_col = QVBoxLayout()
+        np_branch_lbl = QLabel("Відділення Нової пошти *")
+        np_branch_lbl.setObjectName("FieldLabel")
+        self.np_branch_input = QLineEdit()
+        self.np_branch_input.setPlaceholderText("Напр. Відділення №12")
+        np_branch_col.addWidget(np_branch_lbl)
+        np_branch_col.addWidget(self.np_branch_input)
+
+        np_layout.addLayout(np_city_col)
+        np_layout.addLayout(np_branch_col)
+        self.address_stack.addWidget(np_page)
+
+        # Сторінка 1: Укрпошта
+        up_page = QWidget()
+        up_layout = QHBoxLayout(up_page)
+        up_layout.setContentsMargins(0, 4, 0, 0)
+        up_layout.setSpacing(10)
+
+        up_city_col = QVBoxLayout()
+        up_city_lbl = QLabel("Місто / населений пункт *")
+        up_city_lbl.setObjectName("FieldLabel")
+        self.up_city_input = QLineEdit()
+        self.up_city_input.setPlaceholderText("Введіть населений пункт")
+        up_city_col.addWidget(up_city_lbl)
+        up_city_col.addWidget(self.up_city_input)
+
+        up_branch_col = QVBoxLayout()
+        up_branch_lbl = QLabel("Відділення Укрпошти / індекс *")
+        up_branch_lbl.setObjectName("FieldLabel")
+        self.up_branch_input = QLineEdit()
+        self.up_branch_input.setPlaceholderText("Напр. Відділення №5 або 01001")
+        up_branch_col.addWidget(up_branch_lbl)
+        up_branch_col.addWidget(self.up_branch_input)
+
+        up_layout.addLayout(up_city_col)
+        up_layout.addLayout(up_branch_col)
+        self.address_stack.addWidget(up_page)
+
+        # Сторінка 2: Самовивіз
+        pickup_page = QWidget()
+        pickup_layout = QVBoxLayout(pickup_page)
+        pickup_layout.setContentsMargins(0, 4, 0, 0)
+        pickup_info = QLabel(
+            f"📍 Адреса самовивозу: {self.PICKUP_ADDRESS}\n"
+            "🕒 Графік видачі замовлень: Пн–Нд з 09:00 до 20:00 (безкоштовно)"
+        )
+        pickup_info.setWordWrap(True)
+        pickup_info.setStyleSheet("""
+            background-color: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #1E3A8A;
+            font-size: 12px;
+        """)
+        pickup_layout.addWidget(pickup_info)
+        self.address_stack.addWidget(pickup_page)
+
+        left_layout.addWidget(self.address_stack)
+
+        # 3. Спосіб оплати та коментар
+        pay_title = QLabel("3. Спосіб оплати та коментар")
+        pay_title.setObjectName("SectionTitle")
+        pay_title.setStyleSheet("margin-top: 6px;")
+        left_layout.addWidget(pay_title)
+
+        lbl_payment = QLabel("Спосіб оплати *")
+        lbl_payment.setObjectName("FieldLabel")
+        self.payment_combo = QComboBox()
+        self.payment_combo.addItems(["Оплата карткою", "Післяплата"])
+        self.payment_combo.currentTextChanged.connect(self.update_summary_meta)
+        left_layout.addWidget(lbl_payment)
+        left_layout.addWidget(self.payment_combo)
+
+        lbl_comment = QLabel("Коментар до замовлення (необов’язково)")
+        lbl_comment.setObjectName("FieldLabel")
+        self.comment_input = QTextEdit()
+        self.comment_input.setPlaceholderText("Додаткові побажання до замовлення...")
+        self.comment_input.setFixedHeight(62)
+        left_layout.addWidget(lbl_comment)
+        left_layout.addWidget(self.comment_input)
+
+        left_layout.addStretch()
+        columns_layout.addWidget(left_panel, stretch=3)
+
+        # ==========================================
+        # ПРАВА КОЛОНКА: ПІДСУМОК ЗАМОВЛЕННЯ (БЕЗ ФОТО)
+        # ==========================================
+        right_panel = QFrame()
+        right_panel.setObjectName("CardPanel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(16, 14, 16, 14)
+        right_layout.setSpacing(10)
+
+        summary_title = QLabel("Підсумок замовлення")
+        summary_title.setObjectName("SectionTitle")
+        right_layout.addWidget(summary_title)
+
+        # Таблиця товарів (тільки назва, кількість, вартість — без фото)
+        self.summary_table = QTableWidget()
+        self.summary_table.setColumnCount(3)
+        self.summary_table.setHorizontalHeaderLabels(["Товар", "К-сть", "Вартість"])
+        self.summary_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.summary_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.summary_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.summary_table.verticalHeader().setVisible(False)
+        self.summary_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.summary_table.setSelectionMode(QTableWidget.NoSelection)
+        right_layout.addWidget(self.summary_table)
+
+        # Інформаційний блок обраних параметрів доставки та оплати
+        meta_box = QFrame()
+        meta_box.setStyleSheet("""
+            QFrame {
+                background-color: #F8FAFC;
+                border: 1px solid #E2E8F0;
+                border-radius: 6px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+                font-size: 12px;
+                color: #334155;
+            }
+        """)
+        meta_layout = QVBoxLayout(meta_box)
+        meta_layout.setContentsMargins(10, 8, 10, 8)
+        meta_layout.setSpacing(4)
+
+        self.items_count_label = QLabel("Позицій у замовленні: 0 шт.")
+        self.delivery_preview_label = QLabel("Доставка: Нова пошта")
+        self.payment_preview_label = QLabel("Оплата: Оплата карткою")
+
+        meta_layout.addWidget(self.items_count_label)
+        meta_layout.addWidget(self.delivery_preview_label)
+        meta_layout.addWidget(self.payment_preview_label)
+        right_layout.addWidget(meta_box)
+
+        # Загальна вартість
+        total_box = QFrame()
+        total_box.setStyleSheet("""
+            QFrame {
+                background-color: #F0FDF4;
+                border: 1px solid #BBF7D0;
+                border-radius: 8px;
+            }
+        """)
+        total_layout = QHBoxLayout(total_box)
+        total_layout.setContentsMargins(12, 10, 12, 10)
+
+        total_caption = QLabel("Загальна вартість:")
+        total_caption.setStyleSheet("font-size: 14px; font-weight: bold; color: #166534; border: none;")
+        self.total_sum_label = QLabel("0.00 грн")
+        self.total_sum_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #15803D; border: none;")
+
+        total_layout.addWidget(total_caption)
+        total_layout.addStretch()
+        total_layout.addWidget(self.total_sum_label)
+        right_layout.addWidget(total_box)
+
+        # Кнопки підтвердження та повернення
+        self.confirm_btn = QPushButton("✓ Підтвердити замовлення")
+        self.confirm_btn.setCursor(Qt.PointingHandCursor)
+        self.confirm_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #16A34A;
+                color: #FFFFFF;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #15803D;
+            }
+        """)
+        self.confirm_btn.clicked.connect(self.validate_and_accept)
+        right_layout.addWidget(self.confirm_btn)
+
+        self.cancel_btn = QPushButton("Повернутися до кошика")
+        self.cancel_btn.setCursor(Qt.PointingHandCursor)
+        self.cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #E2E8F0;
+                color: #1E293B;
+                font-size: 13px;
+                padding: 7px;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #CBD5E1;
+            }
+        """)
+        self.cancel_btn.clicked.connect(self.reject)
+        right_layout.addWidget(self.cancel_btn)
+
+        columns_layout.addWidget(right_panel, stretch=2)
+        root_layout.addLayout(columns_layout)
+
+        self.populate_summary_table()
+
+    def populate_summary_table(self):
+        """Заповнення підсумку товарів перед підтвердженням"""
+        self.summary_table.setRowCount(len(self.cart_items))
+        total_sum = 0.0
+        total_qty = 0
+
+        for row, (prod, qty) in enumerate(self.cart_items):
+            row_sum = prod.price * qty
+            total_sum += row_sum
+            total_qty += qty
+
+            self.summary_table.setItem(row, 0, QTableWidgetItem(prod.title))
+            self.summary_table.setItem(row, 1, QTableWidgetItem(f"{qty} шт."))
+            self.summary_table.setItem(row, 2, QTableWidgetItem(f"{row_sum:.2f} грн"))
+
+        self.items_count_label.setText(f"Всього товарів: {total_qty} шт.")
+        self.total_sum_label.setText(f"{total_sum:.2f} грн")
+
+    def on_delivery_method_changed(self, index: int):
+        """Динамічне перемикання полів адреси залежно від способу доставки"""
+        self.address_stack.setCurrentIndex(index)
+        self.update_summary_meta()
+
+    def update_summary_meta(self):
+        self.delivery_preview_label.setText(f"Доставка: {self.delivery_combo.currentText()}")
+        self.payment_preview_label.setText(f"Оплата: {self.payment_combo.currentText()}")
+
+    def _validate_phone(self, phone: str) -> bool:
+        cleaned = re.sub(r"[\s\-\(\)]", "", phone.strip())
+        return bool(re.match(r"^(\+?38)?0\d{9}$", cleaned))
+
+    def _validate_email(self, email: str) -> bool:
+        return bool(re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email.strip()))
+
+    def validate_and_accept(self):
+        """Валідація обов'язкових полів, номера телефону, email та адреси доставки"""
+        full_name = self.name_input.text().strip()
+        phone = self.phone_input.text().strip()
+        email = self.email_input.text().strip()
+        delivery_method = self.delivery_combo.currentText()
+
+        if len(full_name) < 3:
+            QMessageBox.warning(self, "Помилка заповнення", "Введіть коректне ПІБ покупця (мінімум 3 символи).")
+            self.name_input.setFocus()
+            return
+
+        if not phone or not self._validate_phone(phone):
+            QMessageBox.warning(
+                self, "Некоректний номер телефону",
+                "Введіть коректний український номер телефону.\nПриклад: +380671234567 або 0671234567."
+            )
+            self.phone_input.setFocus()
+            return
+
+        if not email or not self._validate_email(email):
+            QMessageBox.warning(
+                self, "Некоректний Email",
+                "Введіть коректну електронну пошту.\nПриклад: user@gmail.com"
+            )
+            self.email_input.setFocus()
+            return
+
+        if delivery_method == "Нова пошта":
+            city = self.np_city_input.text().strip()
+            branch = self.np_branch_input.text().strip()
+            if not city or not branch:
+                QMessageBox.warning(
+                    self, "Помилка адреси доставки",
+                    "Для доставки «Нова пошта» обов’язково вкажіть місто та номер відділення."
+                )
+                if not city:
+                    self.np_city_input.setFocus()
+                else:
+                    self.np_branch_input.setFocus()
+                return
+
+        elif delivery_method == "Укрпошта":
+            city = self.up_city_input.text().strip()
+            branch = self.up_branch_input.text().strip()
+            if not city or not branch:
+                QMessageBox.warning(
+                    self, "Помилка адреси доставки",
+                    "Для доставки «Укрпошта» обов’язково вкажіть населений пункт та номер відділення / індекс."
+                )
+                if not city:
+                    self.up_city_input.setFocus()
+                else:
+                    self.up_branch_input.setFocus()
+                return
+
+        self.accept()
+
+    def get_formatted_delivery_address(self) -> str:
+        method = self.delivery_combo.currentText()
+        if method == "Нова пошта":
+            return f"Нова пошта: м. {self.np_city_input.text().strip()}, {self.np_branch_input.text().strip()}"
+        elif method == "Укрпошта":
+            return f"Укрпошта: {self.up_city_input.text().strip()}, {self.up_branch_input.text().strip()}"
+        else:
+            return f"Самовивіз: {self.PICKUP_ADDRESS}"
 
     def get_client_data(self) -> Client:
         return Client(
             full_name=self.name_input.text().strip(),
             phone=self.phone_input.text().strip(),
             email=self.email_input.text().strip(),
-            address=self.address_input.text().strip()
+            address=self.get_formatted_delivery_address()
         )
+
+    def get_order_details(self) -> dict:
+        return {
+            "delivery_method": self.delivery_combo.currentText(),
+            "delivery_address": self.get_formatted_delivery_address(),
+            "payment_method": self.payment_combo.currentText(),
+            "comment": self.comment_input.toPlainText().strip()
+        }
+
+
+class OrderSuccessDialog(QDialog):
+    """Екран успішного оформлення замовлення з унікальним номером"""
+    def __init__(self, order_id: int, client_name: str, delivery_address: str,
+                 payment_method: str, total_amount: float, pdf_path: str, parent=None):
+        super().__init__(parent)
+        self.pdf_path = pdf_path
+        self.setWindowTitle(f"Замовлення №{order_id} оформлено")
+        self.resize(480, 360)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(12)
+
+        badge = QLabel("✅")
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setStyleSheet("font-size: 40px;")
+        layout.addWidget(badge)
+
+        title = QLabel("Замовлення успішно оформлено!")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 19px; font-weight: bold; color: #15803D;")
+        layout.addWidget(title)
+
+        order_num = QLabel(f"Унікальний номер замовлення: №{order_id}")
+        order_num.setAlignment(Qt.AlignCenter)
+        order_num.setStyleSheet("""
+            background-color: #EFF6FF;
+            color: #1D4ED8;
+            border: 1px solid #BFDBFE;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 15px;
+            font-weight: bold;
+        """)
+        layout.addWidget(order_num)
+
+        details_card = QFrame()
+        details_card.setStyleSheet("""
+            QFrame {
+                background-color: #F8FAFC;
+                border: 1px solid #CBD5E1;
+                border-radius: 8px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+                color: #1E293B;
+                font-size: 13px;
+            }
+        """)
+        card_layout = QVBoxLayout(details_card)
+        card_layout.setContentsMargins(14, 12, 14, 12)
+        card_layout.setSpacing(6)
+
+        card_layout.addWidget(QLabel(f"<b>Покупець:</b> {client_name}"))
+        card_layout.addWidget(QLabel(f"<b>Доставка:</b> {delivery_address}"))
+        card_layout.addWidget(QLabel(f"<b>Оплата:</b> {payment_method}"))
+        card_layout.addWidget(QLabel(f"<b>Сума до сплати:</b> {total_amount:.2f} грн"))
+        layout.addWidget(details_card)
+
+        note = QLabel("PDF-чек збережено та завжди доступний у розділі «Мої замовлення».")
+        note.setWordWrap(True)
+        note.setAlignment(Qt.AlignCenter)
+        note.setStyleSheet("font-size: 12px; color: #475569;")
+        layout.addWidget(note)
+
+        btns_row = QHBoxLayout()
+        btns_row.setSpacing(10)
+
+        open_pdf_btn = QPushButton("📄 Відкрити PDF-чек")
+        open_pdf_btn.setCursor(Qt.PointingHandCursor)
+        open_pdf_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: bold;
+                padding: 8px 14px;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover { background-color: #1D4ED8; }
+        """)
+        open_pdf_btn.clicked.connect(self.open_pdf)
+        btns_row.addWidget(open_pdf_btn)
+
+        ok_btn = QPushButton("Готово")
+        ok_btn.setCursor(Qt.PointingHandCursor)
+        ok_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #16A34A;
+                color: #FFFFFF;
+                font-weight: bold;
+                padding: 8px 18px;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover { background-color: #15803D; }
+        """)
+        ok_btn.clicked.connect(self.accept)
+        btns_row.addWidget(ok_btn)
+
+        layout.addLayout(btns_row)
+
+    def open_pdf(self):
+        if self.pdf_path and os.path.exists(self.pdf_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(self.pdf_path)))
 
 
 class CatalogTab(QWidget):
@@ -141,7 +674,6 @@ class CatalogTab(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # 1. Верхня панель фільтрів, пошуку та сортування
         filter_row1 = QHBoxLayout()
         
         filter_row1.addWidget(QLabel("Категорія:"))
@@ -165,14 +697,12 @@ class CatalogTab(QWidget):
         self.sort_combo.currentIndexChanged.connect(self.load_products)
         filter_row1.addWidget(self.sort_combo)
 
-        # Кнопка відкриття окремого вікна кошика
         self.cart_btn = QPushButton("🛒 Кошик (0)")
         self.cart_btn.clicked.connect(self.open_cart)
         filter_row1.addWidget(self.cart_btn)
 
         main_layout.addLayout(filter_row1)
 
-        # 2. Фільтр за діапазоном цін
         filter_row2 = QHBoxLayout()
 
         filter_row2.addWidget(QLabel("Ціна від:"))
@@ -193,7 +723,6 @@ class CatalogTab(QWidget):
 
         main_layout.addLayout(filter_row2)
 
-        # 3. Кнопки управління товарами (CRUD)
         action_btn_layout = QHBoxLayout()
         
         self.add_btn = QPushButton("Додати товар")
@@ -214,7 +743,6 @@ class CatalogTab(QWidget):
 
         main_layout.addLayout(action_btn_layout)
 
-        # 4. Таблиця товарів
         self.products_table = QTableWidget()
         self.products_table.setColumnCount(5)
         self.products_table.setHorizontalHeaderLabels(["ID", "Назва", "Бренд", "Ціна (грн)", "На складі"])
@@ -222,7 +750,6 @@ class CatalogTab(QWidget):
         self.products_table.setSelectionBehavior(QTableWidget.SelectRows)
         main_layout.addWidget(self.products_table)
 
-        # 5. Панель вибору кількості та додавання до кошика
         cart_action_layout = QHBoxLayout()
         cart_action_layout.addWidget(QLabel("Кількість для покупки:"))
         self.quantity_spin = QSpinBox()
@@ -328,8 +855,6 @@ class CatalogTab(QWidget):
             
         return int(item.text())
 
-    # --- ДІЇ З ТОВАРАМИ ---
-
     def add_product(self):
         dialog = ProductDialog(self.db, parent=self)
         if dialog.exec_() == QDialog.Accepted:
@@ -393,8 +918,6 @@ class CatalogTab(QWidget):
             )
             QMessageBox.information(self, f"Деталі товару №{prod.product_id}", info)
 
-    # --- ДІЇ З КОШИКОМ ---
-
     def update_cart_btn_text(self):
         total_count = sum(qty for _, qty in self.cart)
         self.cart_btn.setText(f"🛒 Кошик ({total_count})")
@@ -427,7 +950,6 @@ class CatalogTab(QWidget):
         QMessageBox.information(self, "Кошик", f"Товар «{prod.title}» ({qty} шт.) додано до кошика!")
 
     def open_cart(self):
-        """Відкриття окремого вікна кошика із модуля cart.py"""
         dialog = CartDialog(self.cart, self.db, parent=self)
         dialog.exec_()
         self.update_cart_btn_text()

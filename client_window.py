@@ -1,81 +1,289 @@
-import sqlite3
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QComboBox, QTableWidget, QTableWidgetItem, QPushButton, 
-    QHeaderView, QMessageBox, QLineEdit, QSpinBox, QTabWidget
+    QHeaderView, QMessageBox, QLineEdit, QSpinBox, QTabWidget,
+    QFrame, QCheckBox, QScrollArea
 )
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from db_manager import DatabaseManager
 from cart import CartDialog
 from orders_tab import OrdersTab
 
 
 class ClientCatalogWidget(QWidget):
-    """Віджет каталогу товарів для клієнта"""
+    """Віджет каталогу товарів для клієнта з висувною бічною панеллю фільтрів"""
+    SIDEBAR_WIDTH = 290
+
     def __init__(self, db_manager):
         super().__init__()
         self.db = db_manager
         self.cart = []
+        self.category_checkboxes = []
+        self.sidebar_open = False
         self.init_ui()
 
     def init_ui(self):
-        main_layout = QVBoxLayout(self)
+        # Головний горизонтальний макет: [Ліва бічна панель] + [Основний контент каталогу]
+        root_layout = QHBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        filter_row1 = QHBoxLayout()
-        
-        filter_row1.addWidget(QLabel("Категорія:"))
-        self.category_combo = QComboBox()
-        self.category_combo.currentIndexChanged.connect(self.load_products)
-        filter_row1.addWidget(self.category_combo)
+        # ==========================================
+        # 1. ЛІВА БІЧНА ПАНЕЛЬ ФІЛЬТРІВ ТА КОНТАКТІВ
+        # ==========================================
+        self.sidebar_container = QFrame()
+        self.sidebar_container.setMaximumWidth(0)
+        self.sidebar_container.setMinimumWidth(0)
+        self.sidebar_container.setStyleSheet("""
+            QFrame#SidebarContainer {
+                background-color: #F8FAFC;
+                border-right: 1px solid #CBD5E1;
+            }
+        """)
+        self.sidebar_container.setObjectName("SidebarContainer")
 
-        filter_row1.addWidget(QLabel("Пошук:"))
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Назва або бренд...")
-        self.search_input.textChanged.connect(self.load_products)
-        filter_row1.addWidget(self.search_input)
+        sidebar_outer_layout = QVBoxLayout(self.sidebar_container)
+        sidebar_outer_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_outer_layout.setSpacing(0)
 
-        filter_row1.addWidget(QLabel("Сортування:"))
+        # Внутрішній контейнер фіксованої ширини, щоб елементи не стискалися під час анімації
+        self.sidebar_inner = QWidget()
+        self.sidebar_inner.setFixedWidth(self.SIDEBAR_WIDTH)
+        sidebar_layout = QVBoxLayout(self.sidebar_inner)
+        sidebar_layout.setContentsMargins(14, 12, 14, 12)
+        sidebar_layout.setSpacing(10)
+
+        # --- Верхня шапка панелі: "Фільтри" + кнопка "✕" ---
+        sidebar_header = QHBoxLayout()
+        filters_title = QLabel("Фільтри")
+        filters_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0F172A;")
+        sidebar_header.addWidget(filters_title)
+
+        sidebar_header.addStretch()
+
+        self.close_sidebar_btn = QPushButton("✕")
+        self.close_sidebar_btn.setFixedSize(28, 28)
+        self.close_sidebar_btn.setCursor(Qt.PointingHandCursor)
+        self.close_sidebar_btn.setToolTip("Закрити панель фільтрів")
+        self.close_sidebar_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #CBD5E1;
+                border-radius: 4px;
+                font-size: 14px;
+                font-weight: bold;
+                color: #475569;
+            }
+            QPushButton:hover {
+                background-color: #E2E8F0;
+                color: #0F172A;
+            }
+        """)
+        self.close_sidebar_btn.clicked.connect(self.close_sidebar)
+        sidebar_header.addWidget(self.close_sidebar_btn)
+
+        sidebar_layout.addLayout(sidebar_header)
+
+        # Розділювач
+        line_top = QFrame()
+        line_top.setFrameShape(QFrame.HLine)
+        line_top.setStyleSheet("color: #CBD5E1;")
+        sidebar_layout.addWidget(line_top)
+
+        # --- Прокручувана область для блоків фільтрації ---
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setStyleSheet("background-color: transparent;")
+
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background-color: transparent;")
+        filters_body_layout = QVBoxLayout(scroll_content)
+        filters_body_layout.setContentsMargins(0, 2, 4, 2)
+        filters_body_layout.setSpacing(10)
+
+        # БЛОК: Категорія (чекбокси)
+        cat_label = QLabel("Категорія")
+        cat_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E293B;")
+        filters_body_layout.addWidget(cat_label)
+
+        self.categories_box = QVBoxLayout()
+        self.categories_box.setSpacing(5)
+        filters_body_layout.addLayout(self.categories_box)
+
+        # БЛОК: Фільтр ціни
+        price_section_label = QLabel("Ціна (грн)")
+        price_section_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E293B; margin-top: 4px;")
+        filters_body_layout.addWidget(price_section_label)
+
+        price_from_layout = QHBoxLayout()
+        lbl_from = QLabel("Ціна від:")
+        lbl_from.setFixedWidth(60)
+        lbl_from.setStyleSheet("color: #334155;")
+        self.min_price_input = QLineEdit()
+        self.min_price_input.setPlaceholderText("10000")
+        self.min_price_input.setStyleSheet("background-color: #FFFFFF; padding: 4px 6px; border: 1px solid #CBD5E1; border-radius: 4px;")
+        price_from_layout.addWidget(lbl_from)
+        price_from_layout.addWidget(self.min_price_input)
+        filters_body_layout.addLayout(price_from_layout)
+
+        price_to_layout = QHBoxLayout()
+        lbl_to = QLabel("Ціна до:")
+        lbl_to.setFixedWidth(60)
+        lbl_to.setStyleSheet("color: #334155;")
+        self.max_price_input = QLineEdit()
+        self.max_price_input.setPlaceholderText("50000")
+        self.max_price_input.setStyleSheet("background-color: #FFFFFF; padding: 4px 6px; border: 1px solid #CBD5E1; border-radius: 4px;")
+        price_to_layout.addWidget(lbl_to)
+        price_to_layout.addWidget(self.max_price_input)
+        filters_body_layout.addLayout(price_to_layout)
+
+        # БЛОК: Сортування
+        sort_label = QLabel("Сортування")
+        sort_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E293B; margin-top: 4px;")
+        filters_body_layout.addWidget(sort_label)
+
         self.sort_combo = QComboBox()
         self.sort_combo.addItem("За замовчуванням", "default")
-        self.sort_combo.addItem("Від дешевших до дорожчих", "price_asc")
-        self.sort_combo.addItem("Від дорожчих до дешевших", "price_desc")
-        self.sort_combo.addItem("За наявністю (спочатку більше)", "stock_desc")
-        self.sort_combo.addItem("За наявністю (спочатку менше)", "stock_asc")
-        self.sort_combo.currentIndexChanged.connect(self.load_products)
-        filter_row1.addWidget(self.sort_combo)
+        self.sort_combo.addItem("За ціною (зростанням)", "price_asc")
+        self.sort_combo.addItem("За ціною (спаданням)", "price_desc")
+        self.sort_combo.addItem("За наявністю", "stock_desc")
+        self.sort_combo.setStyleSheet("background-color: #FFFFFF; padding: 5px; border: 1px solid #CBD5E1; border-radius: 4px;")
+        filters_body_layout.addWidget(self.sort_combo)
+
+        # КНОПКИ: Застосувати та Скинути фільтри
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setSpacing(6)
+        buttons_layout.setContentsMargins(0, 8, 0, 4)
+
+        self.apply_btn = QPushButton("Застосувати")
+        self.apply_btn.setCursor(Qt.PointingHandCursor)
+        self.apply_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: bold;
+                padding: 7px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1D4ED8;
+            }
+        """)
+        self.apply_btn.clicked.connect(self.load_products)
+        buttons_layout.addWidget(self.apply_btn)
+
+        self.reset_btn = QPushButton("Скинути фільтри")
+        self.reset_btn.setCursor(Qt.PointingHandCursor)
+        self.reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #E2E8F0;
+                color: #1E293B;
+                padding: 6px;
+                border: 1px solid #CBD5E1;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #CBD5E1;
+            }
+        """)
+        self.reset_btn.clicked.connect(self.reset_filters)
+        buttons_layout.addWidget(self.reset_btn)
+
+        filters_body_layout.addLayout(buttons_layout)
+        filters_body_layout.addStretch()
+
+        scroll_area.setWidget(scroll_content)
+        sidebar_layout.addWidget(scroll_area, stretch=1)
+
+        # --- БЛОК: Контакти (у самому низу бічної панелі) ---
+        contacts_frame = QFrame()
+        contacts_frame.setStyleSheet("""
+            QFrame {
+                background-color: #EEF2FF;
+                border: 1px solid #C7D2FE;
+                border-radius: 6px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+                color: #1E293B;
+                font-size: 11px;
+            }
+        """)
+        contacts_layout = QVBoxLayout(contacts_frame)
+        contacts_layout.setContentsMargins(10, 8, 10, 8)
+        contacts_layout.setSpacing(4)
+
+        contacts_title = QLabel("Контакти")
+        contacts_title.setStyleSheet("font-weight: bold; font-size: 13px; color: #1E3A8A; border: none;")
+        contacts_layout.addWidget(contacts_title)
+
+        contacts_layout.addWidget(QLabel("📞 Телефон: +38 (067) 123-45-67"))
+        contacts_layout.addWidget(QLabel("✉ Email: support@pcshop.ua"))
+        contacts_layout.addWidget(QLabel("📍 Адреса: м. Київ, вул. Хрещатик, 22"))
+        contacts_layout.addWidget(QLabel("📷 Instagram: @pcshop_ua"))
+        contacts_layout.addWidget(QLabel("✈️ Telegram: @pcshop_support"))
+
+        sidebar_layout.addWidget(contacts_frame)
+        sidebar_outer_layout.addWidget(self.sidebar_inner)
+
+        # Анімація відкриття/закриття бічної панелі
+        self.sidebar_anim = QPropertyAnimation(self.sidebar_container, b"maximumWidth")
+        self.sidebar_anim.setDuration(220)
+        self.sidebar_anim.setEasingCurve(QEasingCurve.InOutCubic)
+
+        root_layout.addWidget(self.sidebar_container)
+
+        # ==========================================
+        # 2. ОСНОВНИЙ КОНТЕНТ КАТАЛОГУ ТОВАРІВ
+        # ==========================================
+        main_content = QWidget()
+        main_layout = QVBoxLayout(main_content)
+        main_layout.setContentsMargins(12, 10, 12, 10)
+        main_layout.setSpacing(10)
+
+        # Верхня панель: кнопка ☰ зліва, швидкий пошук, деталі та кошик
+        top_bar = QHBoxLayout()
+
+        self.menu_btn = QPushButton("☰")
+        self.menu_btn.setFixedSize(36, 32)
+        self.menu_btn.setCursor(Qt.PointingHandCursor)
+        self.menu_btn.setToolTip("Відкрити / закрити фільтри")
+        self.menu_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: bold;
+                background-color: #F1F5F9;
+                border: 1px solid #CBD5E1;
+                border-radius: 5px;
+                color: #0F172A;
+            }
+            QPushButton:hover {
+                background-color: #E2E8F0;
+            }
+        """)
+        self.menu_btn.clicked.connect(self.toggle_sidebar)
+        top_bar.addWidget(self.menu_btn)
+
+        top_bar.addWidget(QLabel("Пошук:"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Назва товару або бренд...")
+        self.search_input.textChanged.connect(self.load_products)
+        top_bar.addWidget(self.search_input)
+
+        self.details_btn = QPushButton("Деталі товару")
+        self.details_btn.clicked.connect(self.show_details)
+        top_bar.addWidget(self.details_btn)
 
         self.cart_btn = QPushButton("🛒 Кошик (0)")
         self.cart_btn.clicked.connect(self.open_cart)
-        filter_row1.addWidget(self.cart_btn)
+        top_bar.addWidget(self.cart_btn)
 
-        main_layout.addLayout(filter_row1)
+        main_layout.addLayout(top_bar)
 
-        filter_row2 = QHBoxLayout()
-
-        filter_row2.addWidget(QLabel("Ціна від:"))
-        self.min_price_input = QLineEdit()
-        self.min_price_input.setPlaceholderText("0")
-        self.min_price_input.textChanged.connect(self.load_products)
-        filter_row2.addWidget(self.min_price_input)
-
-        filter_row2.addWidget(QLabel("Ціна до:"))
-        self.max_price_input = QLineEdit()
-        self.max_price_input.setPlaceholderText("макс")
-        self.max_price_input.textChanged.connect(self.load_products)
-        filter_row2.addWidget(self.max_price_input)
-
-        self.reset_btn = QPushButton("Скинути фільтри")
-        self.reset_btn.clicked.connect(self.reset_filters)
-        filter_row2.addWidget(self.reset_btn)
-
-        main_layout.addLayout(filter_row2)
-
-        action_layout = QHBoxLayout()
-        self.details_btn = QPushButton("Деталі товару")
-        self.details_btn.clicked.connect(self.show_details)
-        action_layout.addWidget(self.details_btn)
-        action_layout.addStretch()
-        main_layout.addLayout(action_layout)
-
+        # Таблиця товарів (займає весь простір, коли панель закрита)
         self.products_table = QTableWidget()
         self.products_table.setColumnCount(5)
         self.products_table.setHorizontalHeaderLabels(["ID", "Назва", "Бренд", "Ціна (грн)", "На складі"])
@@ -83,6 +291,7 @@ class ClientCatalogWidget(QWidget):
         self.products_table.setSelectionBehavior(QTableWidget.SelectRows)
         main_layout.addWidget(self.products_table)
 
+        # Нижня панель додавання товару в кошик
         cart_action_layout = QHBoxLayout()
         cart_action_layout.addWidget(QLabel("Кількість для покупки:"))
         self.quantity_spin = QSpinBox()
@@ -95,20 +304,64 @@ class ClientCatalogWidget(QWidget):
 
         main_layout.addLayout(cart_action_layout)
 
+        root_layout.addWidget(main_content, stretch=1)
+
         self.load_categories()
 
+    # --- УПРАВЛІННЯ БІЧНОЮ ПАНЕЛЛЮ ---
+
+    def toggle_sidebar(self):
+        """Відкриття або закриття бічної панелі при натисканні на ☰"""
+        if self.sidebar_open:
+            self.close_sidebar()
+        else:
+            self.open_sidebar()
+
+    def open_sidebar(self):
+        self.sidebar_open = True
+        self.sidebar_anim.stop()
+        self.sidebar_anim.setStartValue(self.sidebar_container.width())
+        self.sidebar_anim.setEndValue(self.SIDEBAR_WIDTH)
+        self.sidebar_anim.start()
+
+    def close_sidebar(self):
+        self.sidebar_open = False
+        self.sidebar_anim.stop()
+        self.sidebar_anim.setStartValue(self.sidebar_container.width())
+        self.sidebar_anim.setEndValue(0)
+        self.sidebar_anim.start()
+
+    # --- РОБОТА З КАТЕГОРІЯМИ ТА ФІЛЬТРАМИ ---
+
     def load_categories(self):
-        self.category_combo.blockSignals(True)
-        self.category_combo.clear()
-        self.category_combo.addItem("Всі категорії", None)
+        """Динамічне завантаження категорій у вигляді чекбоксів"""
+        # Очищення попередніх чекбоксів
+        for cb in self.category_checkboxes:
+            self.categories_box.removeWidget(cb)
+            cb.deleteLater()
+        self.category_checkboxes.clear()
+
         categories = self.db.get_all_categories()
         for cat in categories:
-            self.category_combo.addItem(cat.name, cat.category_id)
-        self.category_combo.blockSignals(False)
+            cb = QCheckBox(cat.name)
+            cb.setProperty("category_id", cat.category_id)
+            cb.setStyleSheet("color: #334155; font-size: 12px;")
+            self.categories_box.addWidget(cb)
+            self.category_checkboxes.append(cb)
+
         self.load_products()
 
+    def _get_selected_category_ids(self):
+        """Повертає список ID обраних категорій"""
+        selected = []
+        for cb in self.category_checkboxes:
+            if cb.isChecked():
+                selected.append(cb.property("category_id"))
+        return selected
+
     def load_products(self):
-        category_id = self.category_combo.currentData()
+        """Застосування обраних категорій, діапазону цін, пошуку та сортування"""
+        selected_category_ids = self._get_selected_category_ids()
         query = self.search_input.text().strip()
         sort_by = self.sort_combo.currentData() or "default"
 
@@ -130,8 +383,8 @@ class ClientCatalogWidget(QWidget):
                 pass
 
         products = self.db.search_products(
-            query=query, 
-            category_id=category_id,
+            query=query,
+            category_ids=selected_category_ids if selected_category_ids else None,
             min_price=min_price,
             max_price=max_price,
             sort_by=sort_by
@@ -155,23 +408,17 @@ class ClientCatalogWidget(QWidget):
             self.products_table.setItem(row, 4, QTableWidgetItem(str(prod.stock_quantity)))
 
     def reset_filters(self):
-        self.category_combo.blockSignals(True)
-        self.search_input.blockSignals(True)
-        self.sort_combo.blockSignals(True)
-        self.min_price_input.blockSignals(True)
-        self.max_price_input.blockSignals(True)
+        """Очищення всіх фільтрів та повернення стандартного списку товарів"""
+        for cb in self.category_checkboxes:
+            cb.setChecked(False)
 
-        self.category_combo.setCurrentIndex(0)
-        self.search_input.clear()
-        self.sort_combo.setCurrentIndex(0)
         self.min_price_input.clear()
         self.max_price_input.clear()
+        self.sort_combo.setCurrentIndex(0)
 
-        self.category_combo.blockSignals(False)
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
         self.search_input.blockSignals(False)
-        self.sort_combo.blockSignals(False)
-        self.min_price_input.blockSignals(False)
-        self.max_price_input.blockSignals(False)
 
         self.load_products()
 
@@ -249,13 +496,12 @@ class ClientWindow(QMainWindow):
         self.db = db_manager or DatabaseManager()
         self.client_id = client_id
         self.setWindowTitle("Магазин комп'ютерної техніки — Клієнт")
-        self.resize(1000, 650)
+        self.resize(1050, 680)
 
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
         self.catalog_widget = ClientCatalogWidget(self.db)
-        # Для клієнта is_admin=False
         self.orders_widget = OrdersTab(self.db, client_id=self.client_id, is_admin=False)
 
         self.tabs.addTab(self.catalog_widget, "Каталог товарів")

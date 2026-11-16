@@ -182,6 +182,7 @@ class DatabaseManager:
         self, 
         query: str = "", 
         category_id: Optional[int] = None,
+        category_ids: Optional[List[int]] = None,
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
         sort_by: str = "default"
@@ -197,7 +198,11 @@ class DatabaseManager:
             """
             params = [search_pattern, search_pattern]
 
-            if category_id is not None:
+            if category_ids:
+                placeholders = ",".join("?" for _ in category_ids)
+                sql += f" AND category_id IN ({placeholders})"
+                params.extend(category_ids)
+            elif category_id is not None:
                 sql += " AND category_id = ?"
                 params.append(category_id)
 
@@ -278,12 +283,6 @@ class DatabaseManager:
             conn.commit()
 
     def get_orders(self, client_id: Optional[int] = None, is_admin: bool = False) -> list:
-        """
-        Отримання замовлень за ролями:
-        - якщо is_admin=True: повертаються всі замовлення.
-        - якщо is_admin=False і client_id існує: фільтрація STRICTLY WHERE o.client_id = ?.
-        - якщо is_admin=False і client_id is None: повертає порожній список (без авторизації/замовлень).
-        """
         if not is_admin and client_id is None:
             return []
 
@@ -305,7 +304,6 @@ class DatabaseManager:
             return cursor.fetchall()
 
     def get_order_full_info(self, order_id: int) -> Optional[dict]:
-        """Отримання повної інформації для відновлення чека"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""

@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton,
     QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView,
     QDialog, QMessageBox
 )
@@ -11,13 +11,11 @@ from catalog_tab import ProductDialog
 
 def get_sqlite_connection(db_manager):
     """Повертає активне з'єднання SQLite із наявного DatabaseManager"""
-    # 1. Перевіряємо готові атрибути-з'єднання
     if hasattr(db_manager, "__dict__"):
         for attr_val in vars(db_manager).values():
             if isinstance(attr_val, sqlite3.Connection):
                 return attr_val
 
-    # 2. Перевіряємо методи отримання з'єднання в DatabaseManager
     for method_name in ("get_connection", "_get_connection", "connect", "_connect", "create_connection"):
         method = getattr(db_manager, method_name, None)
         if callable(method):
@@ -25,7 +23,6 @@ def get_sqlite_connection(db_manager):
             if isinstance(conn, sqlite3.Connection):
                 return conn
 
-    # 3. Шукаємо назву/шлях файлу БД в атрибутах DatabaseManager
     db_file = None
     for attr_name in ("db_name", "db_path", "database", "db_file", "path", "filename"):
         val = getattr(db_manager, attr_name, None)
@@ -39,7 +36,6 @@ def get_sqlite_connection(db_manager):
                 db_file = attr_val.strip()
                 break
 
-    # 4. Якщо шлях не збережено в атрибуті, шукаємо наявний непорожній файл БД у теці проєкту
     if not db_file:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         for search_dir in (os.getcwd(), base_dir):
@@ -99,38 +95,53 @@ class ProductsAdminTab(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
 
-        top_bar = QHBoxLayout()
-        top_bar.addWidget(QLabel("Пошук товару (назва або бренд):"))
+        # Панель пошуку та кнопок дій
+        toolbar = QFrame()
+        toolbar.setObjectName("toolbarCard")
+        top_bar = QHBoxLayout(toolbar)
+        top_bar.setContentsMargins(12, 10, 12, 10)
+        top_bar.setSpacing(10)
+
+        search_lbl = QLabel("Пошук товару:")
+        search_lbl.setProperty("role", "sectionTitle")
+        top_bar.addWidget(search_lbl)
 
         self.search_input = QLineEdit()
+        self.search_input.setObjectName("searchInput")
         self.search_input.setPlaceholderText("Введіть назву товару або бренд...")
-        self.search_input.setMaximumWidth(360)
+        self.search_input.setMinimumWidth(300)
+        self.search_input.setMaximumWidth(400)
         self.search_input.textChanged.connect(self.load_products)
         top_bar.addWidget(self.search_input)
 
         top_bar.addStretch()
 
         self.add_btn = QPushButton("Додати товар")
+        self.add_btn.setProperty("variant", "primary")
         self.add_btn.clicked.connect(self.add_product)
         top_bar.addWidget(self.add_btn)
 
-        self.edit_btn = QPushButton("Редагувати")
+        self.edit_btn = QPushButton("Редагувати товар")
+        self.edit_btn.setProperty("variant", "secondary")
         self.edit_btn.clicked.connect(self.edit_product)
         top_bar.addWidget(self.edit_btn)
 
         self.delete_btn = QPushButton("Видалити")
+        self.delete_btn.setProperty("variant", "danger")
         self.delete_btn.clicked.connect(self.delete_product)
         top_bar.addWidget(self.delete_btn)
 
-        layout.addLayout(top_bar)
+        layout.addWidget(toolbar)
 
+        # Таблиця товарів
         self.products_table = QTableWidget()
+        self.products_table.setAlternatingRowColors(True)
         self.products_table.setColumnCount(8)
         self.products_table.setHorizontalHeaderLabels([
-            "ID", "Назва", "Бренд", "Категорія", "Постачальник",
+            "ID", "Назва товару", "Бренд", "Категорія", "Постачальник",
             "Ціна (грн)", "На складі", "Опис"
         ])
         self.products_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -142,6 +153,7 @@ class ProductsAdminTab(QWidget):
         self.products_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         self.products_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
         self.products_table.verticalHeader().setVisible(False)
+        self.products_table.verticalHeader().setDefaultSectionSize(38)
         self.products_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.products_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.products_table.cellDoubleClicked.connect(lambda _r, _c: self.edit_product())
@@ -172,6 +184,7 @@ class ProductsAdminTab(QWidget):
                 FROM products p
                 LEFT JOIN categories c ON p.category_id = c.category_id
                 LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
+                ORDER BY p.product_id DESC
             """
         else:
             sql = """
@@ -186,17 +199,19 @@ class ProductsAdminTab(QWidget):
                     COALESCE(p.description, '')
                 FROM products p
                 LEFT JOIN categories c ON p.category_id = c.category_id
+                ORDER BY p.product_id DESC
             """
 
-        params = []
-        if query:
-            sql += " WHERE LOWER(p.title) LIKE ? OR LOWER(p.brand) LIKE ?"
-            like_val = f"%{query}%"
-            params.extend([like_val, like_val])
+        cursor.execute(sql)
+        all_rows = cursor.fetchall()
 
-        sql += " ORDER BY p.product_id DESC"
-        cursor.execute(sql, params)
-        rows = cursor.fetchall()
+        if query:
+            rows = [
+                r for r in all_rows
+                if query in str(r[1] or "").lower() or query in str(r[2] or "").lower()
+            ]
+        else:
+            rows = all_rows
 
         self.products_table.setRowCount(len(rows))
         for r_idx, row in enumerate(rows):

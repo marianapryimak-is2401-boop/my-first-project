@@ -1,0 +1,113 @@
+/* ==========================================================================
+   TECHSTORE VIOLET — СТИЛІ КЛІЄНТСЬКОЇ ВІТРИНИ, КАТАЛОГУ, КАРТОК І БОНУСІВ
+   ========================================================================== */
+
+/* Бічна панель фільтрів каталогу */
+QFrame#filterSidebar, QWidget#filterSidebar {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-top: 3px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+/* Верхня панель пошуку та сортування у каталозі */
+QFrame#searchFilterBar {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+}
+
+/* Картка товару в каталозі та в «Обраному» */
+QFrame#productCard, QFrame[card="product"] {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+}
+
+QFrame#productCard:hover, QFrame[card="product"]:hover {
+    border: 2px solid #6D4AFF;
+    background-color: #FCFBFF;
+}
+
+QLabel#productTitle, QLabel[role="productTitle"] {
+    font-size: 14px;
+    font-weight: 700;
+    color: #231F32;
+}
+
+QLabel#productMeta, QLabel[role="productMeta"] {
+    font-size: 12px;
+    color: #68627D;
+}
+
+QLabel#productPrice, QLabel[role="productPrice"] {
+    font-size: 16px;
+    font-weight: 700;
+    color: #5436D6;
+}
+
+/* Сторінка детального перегляду товару */
+QFrame#productDetailCard {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-top: 3px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+QLabel#detailPriceLabel {
+    font-size: 22px;
+    font-weight: 700;
+    color: #5436D6;
+}
+
+/* Кошик покупок та оформлення замовлення */
+QFrame#cartSummaryBox, QFrame#checkoutFormBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-top: 3px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+QLabel#cartTotalLabel {
+    font-size: 18px;
+    font-weight: 700;
+    color: #231F32;
+}
+
+/* Бонусна програма (особистий кабінет та списання в кошику) */
+QFrame#bonusCard, QFrame#bonusInfoBox, QGroupBox#bonusGroupBox {
+    background-color: #F4F0FF;
+    border: 1px solid #C8BBF7;
+    border-left: 4px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+QLabel#bonusBalanceLabel {
+    font-size: 20px;
+    font-weight: 700;
+    color: #5436D6;
+}
+
+QProgressBar#bonusProgressBar {
+    background-color: #DFD8F7;
+    border: none;
+    border-radius: 5px;
+    height: 10px;
+    text-align: center;
+}
+
+QProgressBar#bonusProgressBar::chunk {
+    background-color: #6D4AFF;
+    border-radius: 5px;
+}
+
+/* Картка замовлення в особистому кабінеті */
+QFrame#orderCard, QFrame[card="order"] {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+}
+
+QFrame#orderCard:hover, QFrame[card="order"]:hover {
+    border-color: #9A87E8;
+}

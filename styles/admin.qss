@@ -1,0 +1,62 @@
+/* ==========================================================================
+   TECHSTORE VIOLET — СТИЛІ ПАНЕЛІ АДМІНІСТРАТОРА
+   ========================================================================== */
+
+/* Верхня інформаційна панель стану магазину */
+QFrame#adminOverviewStrip {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-left: 4px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+QFrame#overviewMetricChip {
+    background-color: #F7F5FC;
+    border: 1px solid #E2DCF2;
+    border-radius: 6px;
+}
+
+/* Черга нових замовлень, які потребують першочергової уваги */
+QGroupBox#newOrdersBox {
+    background-color: #FFFFFF;
+    border: 1px solid #C8BBF7;
+    border-top: 3px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+QGroupBox#allOrdersBox, QGroupBox#suppliersBox,
+QGroupBox#linkedProductsBox, QGroupBox#lowStockBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+}
+
+/* KPI-картки аналітики у вкладці «Статистика» */
+QFrame#kpiCard {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-top: 3px solid #6D4AFF;
+    border-radius: 8px;
+}
+
+QFrame#kpiCard:hover {
+    border-color: #6D4AFF;
+    background-color: #FCFBFF;
+}
+
+QLabel#kpiTitleLabel {
+    color: #68627D;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QLabel#kpiValueLabel {
+    color: #231F32;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+QLabel#kpiSubLabel {
+    color: #68627D;
+    font-size: 12px;
+}

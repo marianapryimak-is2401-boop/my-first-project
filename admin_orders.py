@@ -6,8 +6,17 @@ from PyQt5.QtWidgets import (
     QHeaderView, QGroupBox, QDialog, QMessageBox, QSplitter
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtGui import QDesktopServices, QColor, QFont
 from admin_products import get_sqlite_connection, get_table_columns
+
+STATUS_TEXT_COLORS = {
+    "нове": QColor("#5436D6"),
+    "в обробці": QColor("#36304D"),
+    "відправлено": QColor("#295985"),
+    "доставлено": QColor("#216E41"),
+    "завершено": QColor("#216E41"),
+    "скасовано": QColor("#A63A4B"),
+}
 
 
 def award_bonuses_once_on_delivery(db_manager, order_id: int, new_status: str):
@@ -175,26 +184,29 @@ class AdminOrderDetailsDialog(QDialog):
         self.db = db_manager
         self.order_id = order_id
         self.setWindowTitle(f"Замовлення №{order_id} — Детальна інформація")
-        self.resize(720, 560)
+        self.resize(760, 600)
         self.init_ui()
         self.load_data()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
 
         top_row = QHBoxLayout()
-        self.header_lbl = QLabel(f"<b>Замовлення №{self.order_id}</b>")
+        self.header_lbl = QLabel(f"Замовлення №{self.order_id}")
+        self.header_lbl.setProperty("role", "pageTitle")
         top_row.addWidget(self.header_lbl)
         top_row.addStretch()
 
-        top_row.addWidget(QLabel("Статус:"))
+        top_row.addWidget(QLabel("Статус замовлення:"))
         self.status_combo = QComboBox()
+        self.status_combo.setMinimumWidth(160)
         self.status_combo.addItems(self.STATUSES)
         top_row.addWidget(self.status_combo)
 
         self.save_status_btn = QPushButton("Зберегти статус")
+        self.save_status_btn.setProperty("variant", "primary")
         self.save_status_btn.clicked.connect(self.save_status)
         top_row.addWidget(self.save_status_btn)
 
@@ -202,7 +214,7 @@ class AdminOrderDetailsDialog(QDialog):
 
         info_box = QGroupBox("Інформація про покупця, доставку та оплату")
         info_grid = QGridLayout(info_box)
-        info_grid.setSpacing(6)
+        info_grid.setSpacing(8)
 
         self.date_lbl = QLabel("—")
         self.client_lbl = QLabel("—")
@@ -245,6 +257,7 @@ class AdminOrderDetailsDialog(QDialog):
         items_layout = QVBoxLayout(items_box)
 
         self.items_table = QTableWidget()
+        self.items_table.setAlternatingRowColors(True)
         self.items_table.setColumnCount(4)
         self.items_table.setHorizontalHeaderLabels(["Назва товару", "Кількість", "Ціна за од.", "Сума"])
         self.items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -252,20 +265,22 @@ class AdminOrderDetailsDialog(QDialog):
         self.items_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.items_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.items_table.verticalHeader().setVisible(False)
+        self.items_table.verticalHeader().setDefaultSectionSize(36)
         self.items_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.items_table.setSelectionMode(QTableWidget.NoSelection)
         items_layout.addWidget(self.items_table)
 
         layout.addWidget(items_box, stretch=1)
 
-        summary_box = QGroupBox("Фінансовий підсумок")
+        summary_box = QGroupBox("Фінансовий підсумок та бонуси")
         sum_layout = QVBoxLayout(summary_box)
-        sum_layout.setSpacing(4)
+        sum_layout.setSpacing(6)
 
         self.subtotal_lbl = QLabel("Вартість товарів: 0.00 грн")
         self.bonus_used_lbl = QLabel("Використано бонусів: 0 бонусів")
         self.total_lbl = QLabel("<b>Загальна сума замовлення: 0.00 грн</b>")
         self.bonus_award_lbl = QLabel("Бонуси за замовлення: —")
+        self.bonus_award_lbl.setProperty("role", "muted")
 
         sum_layout.addWidget(self.subtotal_lbl)
         sum_layout.addWidget(self.bonus_used_lbl)
@@ -276,6 +291,7 @@ class AdminOrderDetailsDialog(QDialog):
 
         bottom_row = QHBoxLayout()
         self.receipt_btn = QPushButton("Переглянути чек (PDF)")
+        self.receipt_btn.setProperty("variant", "secondary")
         self.receipt_btn.clicked.connect(
             lambda: open_or_generate_order_receipt(self.db, self.order_id, parent=self)
         )
@@ -371,17 +387,19 @@ class OrdersAdminTab(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
 
         splitter = QSplitter(Qt.Vertical)
 
         # 1. БЛОК НОВИХ ЗАМОВЛЕНЬ, ЯКІ ОЧІКУЮТЬ ПІДТВЕРДЖЕННЯ
         self.new_orders_box = QGroupBox("Нові замовлення, які очікують підтвердження (0)")
+        self.new_orders_box.setObjectName("newOrdersBox")
         new_layout = QVBoxLayout(self.new_orders_box)
-        new_layout.setSpacing(8)
+        new_layout.setSpacing(10)
 
         self.new_orders_table = QTableWidget()
+        self.new_orders_table.setAlternatingRowColors(True)
         self.new_orders_table.setColumnCount(9)
         self.new_orders_table.setHorizontalHeaderLabels([
             "№", "Дата", "Покупець", "Телефон", "Товари",
@@ -394,11 +412,15 @@ class OrdersAdminTab(QWidget):
         new_layout.addWidget(self.new_orders_table)
 
         new_actions = QHBoxLayout()
+        new_actions.setSpacing(10)
+
         self.accept_order_btn = QPushButton("Прийняти замовлення в обробку")
+        self.accept_order_btn.setProperty("variant", "primary")
         self.accept_order_btn.clicked.connect(self.accept_selected_new_order)
         new_actions.addWidget(self.accept_order_btn)
 
         self.new_details_btn = QPushButton("Деталі замовлення")
+        self.new_details_btn.setProperty("variant", "secondary")
         self.new_details_btn.clicked.connect(
             lambda: self._open_details_from_table(self.new_orders_table, self.new_orders_table.currentRow())
         )
@@ -413,32 +435,38 @@ class OrdersAdminTab(QWidget):
         new_actions.addStretch()
 
         self.cancel_new_btn = QPushButton("Скасувати замовлення")
+        self.cancel_new_btn.setProperty("variant", "danger")
         self.cancel_new_btn.clicked.connect(self.cancel_selected_new_order)
         new_actions.addWidget(self.cancel_new_btn)
 
         new_layout.addLayout(new_actions)
         splitter.addWidget(self.new_orders_box)
 
-        # 2. БЛОК УСІХ ЗАМОВЛЕНЬ (АКТИВНІ, ЗАВЕРШЕНІ, СКАСОВАНІ)
+        # 2. БЛОК УСІХ ЗАМОВЛЕНЬ
         self.all_orders_box = QGroupBox("Усі замовлення (0)")
+        self.all_orders_box.setObjectName("allOrdersBox")
         all_layout = QVBoxLayout(self.all_orders_box)
-        all_layout.setSpacing(8)
+        all_layout.setSpacing(10)
 
         filter_row = QHBoxLayout()
+        filter_row.setSpacing(10)
         filter_row.addWidget(QLabel("Фільтр за статусом:"))
 
         self.status_filter_combo = QComboBox()
+        self.status_filter_combo.setMinimumWidth(160)
         self.status_filter_combo.addItem("Усі замовлення", "ALL")
         for st in self.ALL_STATUSES:
             self.status_filter_combo.addItem(st, st)
         self.status_filter_combo.currentIndexChanged.connect(self.load_orders)
         filter_row.addWidget(self.status_filter_combo)
 
-        filter_row.addSpacing(12)
-        filter_row.addWidget(QLabel("Пошук (№ або покупець):"))
+        filter_row.addSpacing(8)
+        filter_row.addWidget(QLabel("Пошук:"))
         self.order_search_input = QLineEdit()
+        self.order_search_input.setObjectName("searchInput")
         self.order_search_input.setPlaceholderText("Номер замовлення, ПІБ або телефон...")
-        self.order_search_input.setMaximumWidth(280)
+        self.order_search_input.setMinimumWidth(260)
+        self.order_search_input.setMaximumWidth(340)
         self.order_search_input.textChanged.connect(self.load_orders)
         filter_row.addWidget(self.order_search_input)
 
@@ -451,6 +479,7 @@ class OrdersAdminTab(QWidget):
         all_layout.addLayout(filter_row)
 
         self.all_orders_table = QTableWidget()
+        self.all_orders_table.setAlternatingRowColors(True)
         self.all_orders_table.setColumnCount(10)
         self.all_orders_table.setHorizontalHeaderLabels([
             "№", "Дата", "Покупець", "Телефон", "Товари",
@@ -464,19 +493,23 @@ class OrdersAdminTab(QWidget):
         all_layout.addWidget(self.all_orders_table)
 
         all_actions = QHBoxLayout()
+        all_actions.setSpacing(10)
         all_actions.addWidget(QLabel("Змінити статус на:"))
 
         self.change_status_combo = QComboBox()
+        self.change_status_combo.setMinimumWidth(155)
         self.change_status_combo.addItems(self.ALL_STATUSES)
         all_actions.addWidget(self.change_status_combo)
 
         self.apply_status_btn = QPushButton("Застосувати статус")
+        self.apply_status_btn.setProperty("variant", "primary")
         self.apply_status_btn.clicked.connect(self.change_selected_order_status)
         all_actions.addWidget(self.apply_status_btn)
 
-        all_actions.addSpacing(12)
+        all_actions.addSpacing(8)
 
         self.all_details_btn = QPushButton("Деталі замовлення")
+        self.all_details_btn.setProperty("variant", "secondary")
         self.all_details_btn.clicked.connect(
             lambda: self._open_details_from_table(self.all_orders_table, self.all_orders_table.currentRow())
         )
@@ -512,6 +545,7 @@ class OrdersAdminTab(QWidget):
         if has_status_col:
             header.setSectionResizeMode(9, QHeaderView.ResizeToContents)
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(38)
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
 
@@ -574,12 +608,16 @@ class OrdersAdminTab(QWidget):
         self._fill_orders_table(self.all_orders_table, filtered_all, include_status=True)
 
     def _fill_orders_table(self, table: QTableWidget, rows: list, include_status: bool):
+        bold_font = QFont()
+        bold_font.setBold(True)
+
         table.setRowCount(len(rows))
         for idx, r in enumerate(rows):
             oid, odate, cname, phone, items_txt, qty, total_sum, delivery, payment, status = r
 
             id_item = QTableWidgetItem(f"№{oid}")
             id_item.setData(Qt.UserRole, oid)
+            id_item.setFont(bold_font)
             items_item = QTableWidgetItem(str(items_txt))
             items_item.setToolTip(str(items_txt))
 
@@ -593,7 +631,13 @@ class OrdersAdminTab(QWidget):
             table.setItem(idx, 7, QTableWidgetItem(str(delivery)))
             table.setItem(idx, 8, QTableWidgetItem(str(payment)))
             if include_status:
-                table.setItem(idx, 9, QTableWidgetItem(str(status)))
+                status_str = str(status)
+                status_item = QTableWidgetItem(status_str)
+                status_item.setFont(bold_font)
+                text_color = STATUS_TEXT_COLORS.get(status_str.strip().lower())
+                if text_color:
+                    status_item.setForeground(text_color)
+                table.setItem(idx, 9, status_item)
 
     def _get_order_id_from_row(self, table: QTableWidget, row: int):
         if row < 0:

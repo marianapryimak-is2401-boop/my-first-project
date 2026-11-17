@@ -1,0 +1,539 @@
+/* ==========================================================================
+   TECHSTORE VIOLET — ЗАГАЛЬНА ДИЗАЙН-СИСТЕМА МАГАЗИНУ
+   Палітра:
+   - Основний фон вікна:        #ECEAF4 (контрастна лавандово-сіра підкладка)
+   - Картки та робочі поверхні: #FFFFFF
+   - М'який фіолетовий акцент:  #F3EFFF / #E8E2F7
+   - Фірмова шапка та футер:    #241C3E / #201936
+   - Основний бренд-акцент:     #6D4AFF (hover: #5A37E8, pressed: #4928CC)
+   - Основний текст:            #231F32
+   - Другорядний текст:         #68627D
+   - Чіткі межі та рамки:       #D4CEE6
+   ========================================================================== */
+
+QMainWindow, QDialog {
+    background-color: #ECEAF4;
+    color: #231F32;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 13px;
+}
+
+QWidget {
+    color: #231F32;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 13px;
+}
+
+QLabel, QCheckBox, QRadioButton {
+    background-color: transparent;
+    color: #231F32;
+}
+
+/* Типографіка */
+QLabel[role="pageTitle"] {
+    font-size: 19px;
+    font-weight: 700;
+    color: #231F32;
+}
+
+QLabel[role="sectionTitle"] {
+    font-size: 15px;
+    font-weight: 700;
+    color: #2B224A;
+}
+
+QLabel[role="muted"] {
+    color: #68627D;
+    font-size: 12px;
+}
+
+QLabel[role="badge"] {
+    background-color: #EFEAFF;
+    color: #5436D6;
+    border: 1px solid #D3C7FF;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   ФІРМОВА ВЕРХНЯ ШАПКА ТА НИЖНІЙ ФУТЕР КОНТАКТІВ
+   ========================================================================== */
+
+QFrame#storeTopHeader, QWidget#storeTopHeader,
+QFrame#clientHeader, QWidget#clientHeader {
+    background-color: #241C3E;
+    border-bottom: 2px solid #6D4AFF;
+}
+
+QLabel#storeBrandTitle {
+    color: #FFFFFF;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+QLabel#storeBrandSubtitle {
+    color: #C7BEE3;
+    font-size: 12px;
+}
+
+QLabel#storeRoleBadge {
+    background-color: #392D63;
+    color: #EAE4FF;
+    border: 1px solid #594796;
+    border-radius: 5px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Нижня панель контактів магазину */
+QFrame#storeFooter, QWidget#storeFooter {
+    background-color: #201936;
+    border-top: 2px solid #6D4AFF;
+}
+
+QLabel#footerBrandTitle {
+    color: #FFFFFF;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#footerItemTitle {
+    color: #B6ACD6;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#footerItemValue {
+    color: #F4F2FA;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+QFrame#footerDivider {
+    background-color: #3B3061;
+    max-width: 1px;
+    min-width: 1px;
+}
+
+/* ==========================================================================
+   КАРТКИ ТА ГРУПИ (QGroupBox / QFrame) — БЕЗ ОБРІЗАННЯ ЗАГОЛОВКІВ
+   ========================================================================== */
+
+QGroupBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+    margin-top: 16px;
+    padding: 20px 14px 14px 14px;
+    font-weight: 600;
+    color: #231F32;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 14px;
+    top: 2px;
+    padding: 3px 12px;
+    background-color: #EFEAFF;
+    color: #3A258C;
+    border: 1px solid #D0C5F7;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QFrame[block="card"], QFrame[block="info"], QFrame#toolbarCard {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+}
+
+/* ==========================================================================
+   КНОПКИ — ПРОСТОРІ РОЗМІРИ, ЧІТКІ СТАНИ, ПОВНА ЧИТАБЕЛЬНІСТЬ НАПИСІВ
+   ========================================================================== */
+
+QPushButton {
+    background-color: #FFFFFF;
+    color: #2B224A;
+    border: 1px solid #C9C1E0;
+    border-radius: 6px;
+    padding: 7px 16px;
+    min-height: 24px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #F3EFFF;
+    border-color: #6D4AFF;
+    color: #4A2CD4;
+}
+
+QPushButton:pressed {
+    background-color: #E6DFFF;
+    border-color: #5A37E8;
+}
+
+QPushButton:disabled {
+    background-color: #F2F0F7;
+    color: #9A94AE;
+    border-color: #E0DCEB;
+}
+
+/* Головна фіолетова акцентна кнопка */
+QPushButton[variant="primary"] {
+    background-color: #6D4AFF;
+    color: #FFFFFF;
+    border: 1px solid #6D4AFF;
+    font-weight: 700;
+}
+
+QPushButton[variant="primary"]:hover {
+    background-color: #5A37E8;
+    border-color: #5A37E8;
+    color: #FFFFFF;
+}
+
+QPushButton[variant="primary"]:pressed {
+    background-color: #4928CC;
+    border-color: #4928CC;
+}
+
+QPushButton[variant="primary"]:disabled {
+    background-color: #C3B7F5;
+    border-color: #C3B7F5;
+    color: #FFFFFF;
+}
+
+/* Вторинна м'яка фіолетова кнопка */
+QPushButton[variant="secondary"] {
+    background-color: #EFEAFF;
+    color: #4A2CD4;
+    border: 1px solid #CFC3FA;
+    font-weight: 600;
+}
+
+QPushButton[variant="secondary"]:hover {
+    background-color: #E3DAFF;
+    border-color: #6D4AFF;
+}
+
+/* Кнопка видалення / скасування */
+QPushButton[variant="danger"] {
+    background-color: #FFF6F7;
+    color: #A63A4B;
+    border: 1px solid #E8C5CB;
+    font-weight: 600;
+}
+
+QPushButton[variant="danger"]:hover {
+    background-color: #FDECEF;
+    border-color: #C96A79;
+    color: #8F2B3B;
+}
+
+QPushButton[variant="danger"]:pressed {
+    background-color: #F9DCE1;
+}
+
+/* Кнопка всередині темної шапки */
+QPushButton[variant="header"] {
+    background-color: #362B5C;
+    color: #FFFFFF;
+    border: 1px solid #564591;
+}
+
+QPushButton[variant="header"]:hover {
+    background-color: #6D4AFF;
+    border-color: #6D4AFF;
+    color: #FFFFFF;
+}
+
+/* ==========================================================================
+   ПОЛЯ ВВЕДЕННЯ ТА ВИПАДАЮЧІ СПИСКИ
+   ========================================================================== */
+
+QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {
+    background-color: #FFFFFF;
+    color: #231F32;
+    border: 1px solid #C9C1E0;
+    border-radius: 6px;
+    padding: 6px 12px;
+    min-height: 24px;
+    font-size: 13px;
+    selection-background-color: #6D4AFF;
+    selection-color: #FFFFFF;
+}
+
+QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover,
+QSpinBox:hover, QDoubleSpinBox:hover {
+    border-color: #9A87E8;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus,
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #6D4AFF;
+    padding: 5px 11px;
+    background-color: #FFFFFF;
+}
+
+QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled {
+    background-color: #F2F0F7;
+    color: #8C85A3;
+}
+
+QComboBox {
+    background-color: #FFFFFF;
+    color: #231F32;
+    border: 1px solid #C9C1E0;
+    border-radius: 6px;
+    padding: 6px 12px;
+    min-height: 24px;
+    font-size: 13px;
+}
+
+QComboBox:hover {
+    border-color: #9A87E8;
+}
+
+QComboBox:focus, QComboBox:on {
+    border: 2px solid #6D4AFF;
+    padding: 5px 11px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 28px;
+    border-left: 1px solid #E4DFF2;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    background-color: #F7F5FC;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    color: #231F32;
+    border: 1px solid #6D4AFF;
+    selection-background-color: #EFEAFF;
+    selection-color: #3A258C;
+    padding: 4px;
+    outline: none;
+}
+
+/* ==========================================================================
+   ВКЛАДКИ (QTabWidget / QTabBar) — ПОВНА ВИСОТА БЕЗ ОБРІЗАННЯ ЛІТЕР
+   ========================================================================== */
+
+QTabWidget::pane {
+    background-color: #FFFFFF;
+    border: 1px solid #D4CEE6;
+    border-radius: 8px;
+    border-top-left-radius: 0px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: #E2DDF0;
+    color: #534C6B;
+    border: 1px solid #D4CEE6;
+    border-bottom: none;
+    border-top-left-radius: 7px;
+    border-top-right-radius: 7px;
+    padding: 10px 22px;
+    min-height: 24px;
+    margin-right: 4px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QTabBar::tab:hover {
+    background-color: #EAE5F7;
+    color: #2B224A;
+}
+
+QTabBar::tab:selected {
+    background-color: #FFFFFF;
+    color: #5A37E8;
+    border-color: #D4CEE6;
+    border-top: 3px solid #6D4AFF;
+    font-weight: 700;
+}
+
+/* ==========================================================================
+   ТАБЛИЦІ (QTableWidget / QHeaderView)
+   ========================================================================== */
+
+QTableWidget, QTableView {
+    background-color: #FFFFFF;
+    alternate-background-color: #F9F8FD;
+    color: #231F32;
+    gridline-color: #E6E2F0;
+    border: 1px solid #D4CEE6;
+    border-radius: 7px;
+    selection-background-color: #EAE4FF;
+    selection-color: #231F32;
+    outline: none;
+}
+
+QTableWidget::item, QTableView::item {
+    padding: 6px 10px;
+    border: none;
+}
+
+QTableWidget::item:selected, QTableView::item:selected {
+    background-color: #EAE4FF;
+    color: #231F32;
+}
+
+QHeaderView::section {
+    background-color: #EAE5F5;
+    color: #352D54;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 9px 10px;
+    min-height: 22px;
+    border: none;
+    border-bottom: 2px solid #D0C7E6;
+    border-right: 1px solid #DBD5EC;
+}
+
+QTableCornerButton::section {
+    background-color: #EAE5F5;
+    border: none;
+    border-bottom: 2px solid #D0C7E6;
+}
+
+/* ==========================================================================
+   СКРОЛБАРИ, РОЗДІЛЮВАЧІ ТА ДІАЛОГИ ПІДТВЕРДЖЕННЯ
+   ========================================================================== */
+
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollBar:vertical {
+    background-color: #F0EDF7;
+    width: 10px;
+    margin: 2px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #C4BCE0;
+    min-height: 28px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #6D4AFF;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    background-color: #F0EDF7;
+    height: 10px;
+    margin: 2px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #C4BCE0;
+    min-width: 28px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #6D4AFF;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
+    width: 0px;
+}
+
+QSplitter::handle {
+    background-color: #D4CEE6;
+    border-radius: 2px;
+}
+
+QSplitter::handle:vertical {
+    height: 4px;
+    margin: 4px 0;
+}
+
+QSplitter::handle:horizontal {
+    width: 4px;
+    margin: 0 4px;
+}
+
+QMessageBox {
+    background-color: #FFFFFF;
+}
+
+QMessageBox QLabel {
+    color: #231F32;
+    font-size: 13px;
+    min-width: 280px;
+}
+
+QMessageBox QPushButton {
+    min-width: 90px;
+}
+
+/* Бейджі статусів замовлень */
+QLabel[orderStatus="new"] {
+    background-color: #EFEAFF;
+    color: #5436D6;
+    border: 1px solid #CFC3FA;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: 700;
+}
+
+QLabel[orderStatus="processing"] {
+    background-color: #F2F0F8;
+    color: #36304D;
+    border: 1px solid #D4CEE6;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: 600;
+}
+
+QLabel[orderStatus="shipped"] {
+    background-color: #EBF3FA;
+    color: #295985;
+    border: 1px solid #C5DCF0;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: 600;
+}
+
+QLabel[orderStatus="delivered"] {
+    background-color: #EAF7EF;
+    color: #216E41;
+    border: 1px solid #BCE3CC;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: 700;
+}
+
+QLabel[orderStatus="cancelled"] {
+    background-color: #FFF2F4;
+    color: #A63A4B;
+    border: 1px solid #EBC5CC;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: 600;
+}

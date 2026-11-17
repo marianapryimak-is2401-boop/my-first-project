@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QFrame, QLabel,
     QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QGroupBox, QDialog, QMessageBox, QSplitter
 )
@@ -13,16 +13,20 @@ class SupplierDialog(QDialog):
         super().__init__(parent)
         self.supplier_data = supplier_data
         self.setWindowTitle("Редагування постачальника" if supplier_data else "Додавання постачальника")
-        self.resize(430, 260)
+        self.resize(460, 290)
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        title_lbl = QLabel("Дані постачальника")
+        title_lbl.setProperty("role", "sectionTitle")
+        layout.addWidget(title_lbl)
 
         form = QFormLayout()
-        form.setSpacing(8)
+        form.setSpacing(10)
 
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Наприклад: ТОВ «ТехноПостач»")
@@ -51,7 +55,8 @@ class SupplierDialog(QDialog):
 
         btns_row.addStretch()
 
-        save_btn = QPushButton("Зберегти")
+        save_btn = QPushButton("Зберегти постачальника")
+        save_btn.setProperty("variant", "primary")
         save_btn.clicked.connect(self.validate_and_accept)
         btns_row.addWidget(save_btn)
 
@@ -100,40 +105,54 @@ class SuppliersAdminTab(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
 
-        top_bar = QHBoxLayout()
-        top_bar.addWidget(QLabel("Пошук постачальника за назвою:"))
+        toolbar = QFrame()
+        toolbar.setObjectName("toolbarCard")
+        top_bar = QHBoxLayout(toolbar)
+        top_bar.setContentsMargins(12, 10, 12, 10)
+        top_bar.setSpacing(10)
+
+        search_lbl = QLabel("Пошук постачальника:")
+        search_lbl.setProperty("role", "sectionTitle")
+        top_bar.addWidget(search_lbl)
 
         self.search_input = QLineEdit()
+        self.search_input.setObjectName("searchInput")
         self.search_input.setPlaceholderText("Введіть назву постачальника...")
-        self.search_input.setMaximumWidth(320)
+        self.search_input.setMinimumWidth(280)
+        self.search_input.setMaximumWidth(360)
         self.search_input.textChanged.connect(self.load_suppliers)
         top_bar.addWidget(self.search_input)
 
         top_bar.addStretch()
 
         self.add_btn = QPushButton("Додати постачальника")
+        self.add_btn.setProperty("variant", "primary")
         self.add_btn.clicked.connect(self.add_supplier)
         top_bar.addWidget(self.add_btn)
 
         self.edit_btn = QPushButton("Редагувати")
+        self.edit_btn.setProperty("variant", "secondary")
         self.edit_btn.clicked.connect(self.edit_supplier)
         top_bar.addWidget(self.edit_btn)
 
         self.delete_btn = QPushButton("Видалити")
+        self.delete_btn.setProperty("variant", "danger")
         self.delete_btn.clicked.connect(self.delete_supplier)
         top_bar.addWidget(self.delete_btn)
 
-        layout.addLayout(top_bar)
+        layout.addWidget(toolbar)
 
         splitter = QSplitter(Qt.Vertical)
 
         suppliers_box = QGroupBox("Список постачальників")
+        suppliers_box.setObjectName("suppliersBox")
         sup_layout = QVBoxLayout(suppliers_box)
 
         self.suppliers_table = QTableWidget()
+        self.suppliers_table.setAlternatingRowColors(True)
         self.suppliers_table.setColumnCount(6)
         self.suppliers_table.setHorizontalHeaderLabels([
             "ID", "Назва постачальника", "Телефон", "Електронна пошта", "Адреса", "Товарів"
@@ -145,6 +164,7 @@ class SuppliersAdminTab(QWidget):
         self.suppliers_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.suppliers_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.suppliers_table.verticalHeader().setVisible(False)
+        self.suppliers_table.verticalHeader().setDefaultSectionSize(38)
         self.suppliers_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.suppliers_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.suppliers_table.itemSelectionChanged.connect(self.load_selected_supplier_products)
@@ -154,9 +174,11 @@ class SuppliersAdminTab(QWidget):
         splitter.addWidget(suppliers_box)
 
         self.linked_products_box = QGroupBox("Товари обраного постачальника")
+        self.linked_products_box.setObjectName("linkedProductsBox")
         linked_layout = QVBoxLayout(self.linked_products_box)
 
         self.linked_products_table = QTableWidget()
+        self.linked_products_table.setAlternatingRowColors(True)
         self.linked_products_table.setColumnCount(6)
         self.linked_products_table.setHorizontalHeaderLabels([
             "ID", "Назва товару", "Бренд", "Категорія", "Ціна (грн)", "На складі"
@@ -168,6 +190,7 @@ class SuppliersAdminTab(QWidget):
         self.linked_products_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.linked_products_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.linked_products_table.verticalHeader().setVisible(False)
+        self.linked_products_table.verticalHeader().setDefaultSectionSize(38)
         self.linked_products_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.linked_products_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
@@ -200,6 +223,8 @@ class SuppliersAdminTab(QWidget):
                     COUNT(p.product_id) AS products_count
                 FROM suppliers s
                 LEFT JOIN products p ON s.supplier_id = p.supplier_id
+                GROUP BY s.supplier_id
+                ORDER BY s.name ASC
             """
         else:
             sql = """
@@ -211,16 +236,17 @@ class SuppliersAdminTab(QWidget):
                     COALESCE(s.address, ''),
                     0 AS products_count
                 FROM suppliers s
+                GROUP BY s.supplier_id
+                ORDER BY s.name ASC
             """
 
-        params = []
-        if query:
-            sql += " WHERE LOWER(s.name) LIKE ?"
-            params.append(f"%{query}%")
+        cursor.execute(sql)
+        all_rows = cursor.fetchall()
 
-        sql += " GROUP BY s.supplier_id ORDER BY s.name ASC"
-        cursor.execute(sql, params)
-        rows = cursor.fetchall()
+        if query:
+            rows = [r for r in all_rows if query in str(r[1] or "").lower()]
+        else:
+            rows = all_rows
 
         self.suppliers_table.setRowCount(len(rows))
         for idx, r in enumerate(rows):
